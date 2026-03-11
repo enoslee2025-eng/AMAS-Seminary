@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>AMAS - Asian Missionary Theological Seminary</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* Custom scrollbar for cleaner mobile look */
+      ::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8; 
+      }
+      html, body, #root {
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        margin: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+        background-color: #f8fafc;
+        -webkit-tap-highlight-color: transparent;
+      }
+      input, textarea, select {
+        font-size: 16px;
+      }
+
+      .pt-safe-header {
+        padding-top: calc(env(safe-area-inset-top, 0px) + 0.9rem);
+      }
+
+      /* Squircle Avatar Style - Standard App Icon Look */
+      .rounded-squircle {
+        border-radius: 32%;
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+      }
+
+      /* Safe Area Utilities */
+      .pt-safe-top {
+        padding-top: max(calc(env(safe-area-inset-top, 0px) + 2px), 62px);
+      }
+      .pt-safe-top-college {
+        padding-top: max(calc(env(safe-area-inset-top, 0px) + 2px), 62px);
+      }
+      .pb-safe-area {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      /* Keep just enough bottom space for the lowered fixed nav */
+      .pb-24 {
+        padding-bottom: max(4.5rem, calc(4.5rem + env(safe-area-inset-bottom) - 25px)) !important;
+      }
+      
+      /* Scrollbar Hide Utility */
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+      .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+
+      /* Animations */
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.3s ease-out forwards;
+      }
+
+      @keyframes slideUp {
+        from { transform: translateY(100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      .animate-slide-up {
+        animation: slideUp 0.3s ease-out forwards;
+      }
+
+      @keyframes slideInRight {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+      }
+      .animate-slide-in-right {
+        animation: slideInRight 0.3s ease-out forwards;
+      }
+
+      @keyframes fadeInUp {
+        from { transform: translateY(10px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      .animate-fade-in-up {
+        animation: fadeInUp 0.4s ease-out forwards;
+      }
+
+      @keyframes scaleIn {
+        from { transform: scale(0.95); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+      .animate-scale-in {
+        animation: scaleIn 0.2s ease-out forwards;
+      }
+
+      @keyframes bounceSubtle {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-5px); }
+      }
+      .animate-bounce-subtle {
+        animation: bounceSubtle 2s infinite;
+      }
+      
+      @keyframes widthGrow {
+        from { width: 0; }
+        to { width: 100%; }
+      }
+    </style>
+
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "recharts": "https://aistudiocdn.com/recharts@^3.4.1",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0"
+  }
+}
+</script>
+  <script type="module" crossorigin src="/assets/index-DLMqdEsW.js"></script>
+</head>
+  <body>
+    <div id="root"></div>
+</body>
+</html>
