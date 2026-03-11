@@ -6,4 +6,4 @@ dist/
 .env.*
 coverage/
 ios/App/App/public/
-
+*.tsbuildinfo

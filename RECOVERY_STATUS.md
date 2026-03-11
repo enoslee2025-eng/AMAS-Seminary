@@ -1,31 +1,50 @@
 ## Recovery Status
 
-The original source tree for this workspace was deleted.
+The original source tree for this workspace was deleted and could not be restored from Trash.
 
-The thread working directory issue has been resolved by recreating the missing target path:
+The broken thread working directory has been repaired by recreating the target path:
 
 - `/Users/enoslee/Documents/New project`
 - `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)`
 
-Current recovery state:
+## What has been recovered
 
-- The workspace path now exists and is usable again.
-- The original TypeScript/React source files have not been recovered.
-- A runnable frontend bundle was recovered from the installed iOS simulator app.
+- A runnable frontend bundle from the installed iOS simulator app
+- A local Git repository with recovery history
+- A new editable Vite + React + TypeScript source workspace
 
-Recovered snapshot:
+Recovered snapshot files:
 
 - `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/recovered_from_simulator/public/index.html`
 - `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/recovered_from_simulator/public/assets/index-DLMqdEsW.js`
+- `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/public/recovered/index.html`
+- `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/public/recovered/assets/index-DLMqdEsW.js`
 
-What is missing:
+## New editable source workspace
 
-- `App.tsx`
+The following files now exist and build successfully:
+
+- `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/package.json`
+- `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/vite.config.ts`
+- `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/tsconfig.json`
+- `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/tsconfig.app.json`
+- `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/index.html`
+- `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/src/main.tsx`
+- `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/src/App.tsx`
+- `/Users/enoslee/Desktop/amas-asian-missionary-seminary (Codex)/src/styles.css`
+
+## Current limitation
+
+The original hand-written source modules are still missing:
+
 - `components/`
 - `services/`
 - `backend/`
-- project build files
 
-Recommended next step:
+The project is now in a controlled rebuild state rather than a fully restored state.
 
-- Rebuild a new source workspace from the recovered simulator bundle and then reintroduce backend and service layers incrementally.
+## Next development direction
+
+1. Keep the recovered bundle versioned
+2. Rebuild source modules incrementally from the recovered app behavior
+3. Reintroduce backend and service layers in a maintainable structure

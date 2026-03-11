@@ -18,9 +18,11 @@ Recovered app files live here:
 ## Commands
 
 - `npm run dev`
+  - Runs the new editable Vite source workspace on `http://127.0.0.1:4174`
+- `npm run dev:recovered`
   - Serves the recovered frontend snapshot on `http://127.0.0.1:4173`
 - `npm run sync:simulator`
-  - Refreshes the recovered snapshot from the currently booted simulator app install
+  - Refreshes the recovered snapshot from the simulator app install into both recovery folders
 
 ## Recovery direction
 
@@ -29,4 +31,3 @@ The original editable React/TypeScript source is gone. The next development phas
 1. Keep the recovered bundle versioned
 2. Recreate a fresh editable source workspace
 3. Rebuild modules incrementally: app shell, courses, community, chat, profile, backend
-

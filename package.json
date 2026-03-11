@@ -1,12 +1,26 @@
 {
-  "name": "amas-seminary-recovery",
+  "name": "amas-seminary",
   "version": "0.1.0",
   "private": true,
-  "description": "Recovery workspace for AMAS Seminary after source deletion.",
+  "description": "Rebuilt source workspace for AMAS Seminary after source deletion.",
+  "type": "module",
   "scripts": {
-    "dev": "./scripts/serve-recovered.sh",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "dev:recovered": "./scripts/serve-recovered.sh",
     "start": "./scripts/serve-recovered.sh",
     "sync:simulator": "./scripts/sync-from-simulator.sh"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.1"
   }
 }
-
