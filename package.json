@@ -1,0 +1,12 @@
+{
+  "name": "amas-seminary-recovery",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Recovery workspace for AMAS Seminary after source deletion.",
+  "scripts": {
+    "dev": "./scripts/serve-recovered.sh",
+    "start": "./scripts/serve-recovered.sh",
+    "sync:simulator": "./scripts/sync-from-simulator.sh"
+  }
+}
+
