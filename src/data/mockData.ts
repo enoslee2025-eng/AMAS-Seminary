@@ -1,5 +1,6 @@
 import {
   ChatMessage,
+  CommunityContact,
   CommunityComment,
   CommunityNotification,
   CommunityPostPreview,
@@ -252,6 +253,45 @@ export const communityConversations: ConversationPreview[] = [
     role: 'Ministry Team',
     pinned: false,
     muted: true,
+  },
+];
+
+export const communityContacts: CommunityContact[] = [
+  {
+    id: 'contact-peter',
+    name: '张彼得',
+    role: 'M.Div 2022',
+    region: 'Bangkok',
+    summary: '最近在整理《哥林多前书》课程分享，也愿意继续补课程讨论脉络。',
+    status: '在线',
+    relatedCourseId: 'course-corinthians',
+  },
+  {
+    id: 'contact-grace',
+    name: 'Grace',
+    role: 'Prayer Coordinator',
+    region: 'Singapore',
+    summary: '负责代祷跟进和小组联络，适合从这里继续恢复牧养实践相关会话。',
+    status: '可留言',
+    relatedCourseId: 'course-pastoral-care',
+  },
+  {
+    id: 'contact-daniel',
+    name: 'Rev. Daniel Wong',
+    role: 'Mission Faculty',
+    region: 'Kuala Lumpur',
+    summary: '可以继续对接使徒行传与宣教拓展的课堂材料和跨文化案例。',
+    status: '课程导师',
+    relatedCourseId: 'course-acts',
+  },
+  {
+    id: 'contact-maria',
+    name: 'Dr. Maria Santos',
+    role: 'Leadership Mentor',
+    region: 'Manila',
+    summary: '目前在整理教会领导力课程案例，适合衔接治理、复盘和同工协作话题。',
+    status: '可留言',
+    relatedCourseId: 'course-leadership',
   },
 ];
 

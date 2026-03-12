@@ -80,6 +80,17 @@ export type ConversationPreview = {
   role?: string;
   pinned?: boolean;
   muted?: boolean;
+  contactId?: string;
+};
+
+export type CommunityContact = {
+  id: string;
+  name: string;
+  role: string;
+  region: string;
+  summary: string;
+  status: '在线' | '可留言' | '课程导师';
+  relatedCourseId?: string;
 };
 
 export type CommunityNotificationType = 'interaction' | 'system';

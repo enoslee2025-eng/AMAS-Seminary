@@ -495,6 +495,30 @@ button {
   padding: 20px;
 }
 
+.contact-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.contact-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.contact-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contact-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .conversation-btn,
 .notification-card {
   width: 100%;

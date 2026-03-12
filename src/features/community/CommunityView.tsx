@@ -1,9 +1,17 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { communityChatMessages, communityConversations, communityNotifications, communityPosts, courses } from '../../data/mockData';
+import { communityChatMessages, communityContacts, communityConversations, communityNotifications, communityPosts, courses } from '../../data/mockData';
 import { usePersistentState } from '../../hooks/usePersistentState';
-import { ChatMessage, CommunityNotification, CommunityNotificationType } from '../../types/app';
+import { ChatMessage, CommunityContact, CommunityNotification, CommunityNotificationType } from '../../types/app';
 import { ChatView } from './ChatView';
-import { buildConversationNotification, createAutoReplyMessage, sortConversations } from './communityState';
+import {
+  buildConversationFromContact,
+  buildConversationNotification,
+  createAutoReplyMessage,
+  createContactIntroMessage,
+  filterContacts,
+  getContactConversationId,
+  sortConversations,
+} from './communityState';
 
 type CommunitySection = 'feed' | 'conversations' | 'notifications';
 type FeedFilter = 'all' | '课程感悟' | '代祷实践' | '系统公告' | '恢复记录';
@@ -16,6 +24,7 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
   const [highlightedPostId, setHighlightedPostId] = usePersistentState<string | null>('amas_community_highlight_post', null);
   const [feedFilter, setFeedFilter] = usePersistentState<FeedFilter>('amas_community_feed_filter', 'all');
   const [conversationSearch, setConversationSearch] = usePersistentState('amas_community_conversation_search', '');
+  const [contactSearch, setContactSearch] = usePersistentState('amas_community_contact_search', '');
   const [notificationFilter, setNotificationFilter] = usePersistentState<NotificationFilter>('amas_community_notification_filter', 'all');
   const [notifications, setNotifications] = usePersistentState<CommunityNotification[]>('amas_community_notifications', communityNotifications);
   const [chatMessages, setChatMessages] = usePersistentState<Record<string, ChatMessage[]>>('amas_community_chat_messages', communityChatMessages);
@@ -57,6 +66,7 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
   }, [posts]);
 
   const visibleConversations = useMemo(() => sortConversations(conversations, conversationSearch), [conversationSearch, conversations]);
+  const visibleContacts = useMemo(() => filterContacts(communityContacts, contactSearch), [contactSearch]);
 
   const notificationOverview = useMemo(
     () => ({
@@ -156,6 +166,41 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
 
   const handleMarkAllNotificationsRead = () => {
     setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+  };
+
+  const handleStartConversation = (contact: CommunityContact) => {
+    const existingConversation =
+      conversations.find((item) => item.contactId === contact.id) ??
+      conversations.find((item) => item.id === getContactConversationId(contact.id));
+    const conversationId = existingConversation?.id ?? getContactConversationId(contact.id);
+
+    if (!existingConversation) {
+      const introMessage = createContactIntroMessage(contact);
+
+      setConversations((current) => [buildConversationFromContact(contact), ...current.filter((item) => item.id !== conversationId)]);
+      setChatMessages((current) => ({
+        ...current,
+        [conversationId]: current[conversationId] ?? [introMessage],
+      }));
+      prependNotification(
+        createNotification(
+          `已建立联系：${contact.name}`,
+          '新的联系人会话已经加入最近消息，后续可以继续补真实联系人映射和会话同步。',
+          'system',
+          {
+            conversationId,
+            ...(contact.relatedCourseId ? { courseId: contact.relatedCourseId } : undefined),
+          },
+        ),
+      );
+    }
+
+    setChatReturnSection('conversations');
+    setSelectedConversationId(conversationId);
+    setConversations((current) => current.map((item) => (item.id === conversationId ? { ...item, unread: 0 } : item)));
+    setNotifications((current) =>
+      current.map((item) => (item.conversationId === conversationId ? { ...item, read: true } : item)),
+    );
   };
 
   const handleSendMessage = (conversationId: string, message: ChatMessage) => {
@@ -600,6 +645,66 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
                 placeholder="输入会话名称、简介或角色"
               />
             </label>
+          </section>
+          <section className="content-card">
+            <div className="module-header">
+              <div>
+                <p className="eyebrow">Contact Directory</p>
+                <h2>通讯录</h2>
+              </div>
+            </div>
+            <label className="search-field" htmlFor="community-contact-search">
+              <span>搜索联系人</span>
+              <input
+                id="community-contact-search"
+                value={contactSearch}
+                onChange={(event) => setContactSearch(event.target.value)}
+                placeholder="输入姓名、角色、地区或服事方向"
+              />
+            </label>
+            <div className="contact-grid">
+              {visibleContacts.map((contact) => {
+                const existingConversation =
+                  conversations.find((item) => item.contactId === contact.id) ??
+                  conversations.find((item) => item.id === getContactConversationId(contact.id));
+
+                return (
+                  <article key={contact.id} className="course-card contact-card">
+                    <div className="contact-card-top">
+                      <div>
+                        <h3>{contact.name}</h3>
+                        <p className="course-summary">
+                          {contact.role} · {contact.region}
+                        </p>
+                      </div>
+                      <span className="post-badge">{existingConversation ? '已建会话' : contact.status}</span>
+                    </div>
+                    <p className="course-summary">{contact.summary}</p>
+                    <div className="detail-chip-row">
+                      <span className="post-badge">{contact.region}</span>
+                      {contact.relatedCourseId && <span className="post-badge">可跳转关联课程</span>}
+                      {existingConversation && <span className="post-badge">继续聊天</span>}
+                    </div>
+                    <div className="contact-card-actions">
+                      <button type="button" className="primary-btn compact-btn" onClick={() => handleStartConversation(contact)}>
+                        {existingConversation ? '打开会话' : '发起聊天'}
+                      </button>
+                      {contact.relatedCourseId && (
+                        <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCourse(contact.relatedCourseId!)}>
+                          打开课程
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            {visibleContacts.length === 0 && (
+              <div className="empty-state-card">
+                <strong>没有匹配的联系人</strong>
+                <span>试试姓名、角色、地区，或者直接清空搜索继续浏览通讯录。</span>
+              </div>
+            )}
           </section>
           {visibleConversations.map((conversation) => (
             <button type="button" className="course-card conversation-card conversation-btn" key={conversation.id} onClick={() => handleOpenConversation(conversation.id)}>

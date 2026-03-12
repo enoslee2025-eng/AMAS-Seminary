@@ -1,4 +1,4 @@
-import { ChatMessage, CommunityNotification, ConversationPreview } from '../../types/app';
+import { ChatMessage, CommunityContact, CommunityNotification, ConversationPreview } from '../../types/app';
 
 function getConversationTimeRank(time: string) {
   if (time.includes(':')) {
@@ -86,6 +86,48 @@ export function createAutoReplyMessage(conversation: ConversationPreview): ChatM
     id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     sender: 'other',
     content: contentMap[conversation.id] ?? `${conversation.name} 已收到，后续会继续跟进这条消息。`,
+    time: formatConversationTime(),
+  };
+}
+
+export function filterContacts(contacts: CommunityContact[], keyword: string) {
+  const normalizedKeyword = keyword.trim().toLowerCase();
+
+  return contacts.filter((contact) => {
+    if (!normalizedKeyword) {
+      return true;
+    }
+
+    return [contact.name, contact.role, contact.region, contact.summary].join(' ').toLowerCase().includes(normalizedKeyword);
+  });
+}
+
+export function getContactConversationId(contactId: string) {
+  return `conv-contact-${contactId}`;
+}
+
+export function buildConversationFromContact(contact: CommunityContact): ConversationPreview {
+  return {
+    id: getContactConversationId(contact.id),
+    name: contact.name,
+    subtitle: contact.summary,
+    time: '刚刚',
+    unread: 0,
+    role: contact.role,
+    pinned: false,
+    muted: false,
+    contactId: contact.id,
+  };
+}
+
+export function createContactIntroMessage(contact: CommunityContact): ChatMessage {
+  return {
+    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    sender: 'other',
+    content:
+      contact.relatedCourseId
+        ? `${contact.name} 已上线，我们可以继续对接课程资料和校友圈里的讨论。`
+        : `${contact.name} 已上线，后续可以从这里继续恢复聊天和协作链路。`,
     time: formatConversationTime(),
   };
 }
