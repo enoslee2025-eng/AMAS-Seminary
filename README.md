@@ -21,6 +21,8 @@ Recovered app files live here:
   - Runs the new editable Vite source workspace on `http://127.0.0.1:4174`
 - `npm run dev:recovered`
   - Serves the recovered frontend snapshot on `http://127.0.0.1:4173`
+- `npm run ios:recovered`
+  - Boots the preferred simulator, starts the recovered snapshot server, installs the lightweight iOS shell app, and launches the recovered UI
 - `npm run sync:simulator`
   - Refreshes the recovered snapshot from the simulator app install into both recovery folders
 

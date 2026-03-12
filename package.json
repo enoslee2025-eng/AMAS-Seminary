@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "dev:recovered": "./scripts/serve-recovered.sh",
+    "ios:recovered": "./scripts/start-ios-recovered.sh",
     "start": "./scripts/serve-recovered.sh",
     "sync:simulator": "./scripts/sync-from-simulator.sh"
   },
