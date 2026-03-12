@@ -31,3 +31,9 @@ The original editable React/TypeScript source is gone. The next development phas
 1. Keep the recovered bundle versioned
 2. Recreate a fresh editable source workspace
 3. Rebuild modules incrementally: app shell, courses, community, chat, profile, backend
+
+## Deployment
+
+- GitHub Pages deployment is configured in `.github/workflows/deploy-pages.yml`
+- Once the repository is pushed to GitHub, enable `Settings -> Pages -> Build and deployment -> Source: GitHub Actions`
+- Production builds automatically use the repository name as the Vite `base` path, so project pages like `https://<USER>.github.io/<REPO>/` work without extra edits
