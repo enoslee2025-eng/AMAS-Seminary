@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { ChangeEvent, Dispatch, SetStateAction } from 'react';
 import { communityPosts } from '../../data/mockData';
 import { DisplayCourse, LearningOverview } from '../courses/courseState';
-import { LibraryResource, ProfileState } from '../../types/app';
+import { AppBackupPayload, LibraryResource, ProfileState } from '../../types/app';
+import { downloadAppBackup, parseAppBackupFile } from '../../services/appBackup';
 
 export function ProfileView({
   profile,
@@ -14,6 +15,8 @@ export function ProfileView({
   recentViewedResources,
   libraryViewedCount,
   libraryFavoriteCount,
+  createBackupPayload,
+  onRestoreBackup,
   onOpenCourse,
   onOpenResource,
 }: {
@@ -26,11 +29,16 @@ export function ProfileView({
   recentViewedResources: LibraryResource[];
   libraryViewedCount: number;
   libraryFavoriteCount: number;
+  createBackupPayload: () => AppBackupPayload;
+  onRestoreBackup: (payload: AppBackupPayload) => void;
   onOpenCourse: (courseId: string) => void;
   onOpenResource: (resourceId: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(profile);
+  const [backupNotice, setBackupNotice] = useState<string | null>(null);
+  const [backupError, setBackupError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const latestPosts = communityPosts.slice(0, 2);
   const latestCourse = useMemo(() => continueLearningCourses[0] ?? null, [continueLearningCourses]);
   const learningArchive = useMemo(
@@ -53,6 +61,33 @@ export function ProfileView({
   const handleSave = () => {
     onUpdateProfile(draft);
     setIsEditing(false);
+  };
+
+  const handleExportBackup = () => {
+    const payload = createBackupPayload();
+
+    downloadAppBackup(payload);
+    setBackupError(null);
+    setBackupNotice(`已导出学习存档：${new Date(payload.exportedAt).toLocaleString('zh-CN')}`);
+  };
+
+  const handleImportBackup = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const payload = await parseAppBackupFile(file);
+      onRestoreBackup(payload);
+      setBackupError(null);
+      setBackupNotice(`已从 ${file.name} 恢复学习存档。`);
+    } catch (error) {
+      setBackupNotice(null);
+      setBackupError(error instanceof Error ? error.message : '导入失败，请检查备份文件。');
+    } finally {
+      event.target.value = '';
+    }
   };
 
   return (
@@ -128,6 +163,32 @@ export function ProfileView({
           </div>
         </section>
       )}
+
+      <section className="content-card">
+        <div className="module-header">
+          <div>
+            <p className="eyebrow">Backup Center</p>
+            <h2>学习存档</h2>
+          </div>
+        </div>
+        <p className="hero-copy">现在可以把课程进度、图书馆状态和个人资料导出成 JSON 备份，也可以从备份文件直接恢复。</p>
+        <div className="hero-actions">
+          <button type="button" className="secondary-btn compact-btn" onClick={handleExportBackup}>
+            导出学习存档
+          </button>
+          <button type="button" className="primary-btn compact-btn" onClick={() => importInputRef.current?.click()}>
+            导入学习存档
+          </button>
+        </div>
+        <input ref={importInputRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={handleImportBackup} />
+        <div className="detail-chip-row">
+          <span className="post-badge">课程运行时 {displayCourses.length} 门</span>
+          <span className="post-badge">资源已查看 {libraryViewedCount}</span>
+          <span className="post-badge">资源已收藏 {libraryFavoriteCount}</span>
+        </div>
+        {backupNotice && <p className="backup-feedback">{backupNotice}</p>}
+        {backupError && <p className="backup-feedback backup-feedback-error">{backupError}</p>}
+      </section>
 
       <section className="summary-grid">
         <article className="summary-card">

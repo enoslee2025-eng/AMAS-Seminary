@@ -7,10 +7,19 @@ import { CommunityView } from './features/community/CommunityView';
 import { LibraryView } from './features/library/LibraryView';
 import { ProfileView } from './features/profile/ProfileView';
 import { usePersistentState } from './hooks/usePersistentState';
-import { ProfileState, TabKey, CourseRuntimeRecord, CourseRuntimeState, LibraryRuntimeRecord, LibraryRuntimeState } from './types/app';
+import {
+  AppBackupPayload,
+  CourseRuntimeRecord,
+  CourseRuntimeState,
+  LibraryRuntimeRecord,
+  LibraryRuntimeState,
+  ProfileState,
+  TabKey,
+} from './types/app';
 import { courses, defaultProfile, rebuildMilestones, libraryResources } from './data/mockData';
 import { buildDisplayCourses, createInitialCourseRuntime, getContinueLearningCourses, getLearningOverview } from './features/courses/courseState';
 import { createInitialLibraryRuntime, getLibraryOverview, getRecentViewedResources } from './features/library/libraryState';
+import { createAppBackupPayload } from './services/appBackup';
 
 function App() {
   const [activeTab, setActiveTab] = usePersistentState<TabKey>('amas_rebuild_active_tab', 'home');
@@ -31,6 +40,12 @@ function App() {
   const learningOverview = useMemo(() => getLearningOverview(displayCourses), [displayCourses]);
   const recentViewedResources = useMemo(() => getRecentViewedResources(libraryResources, libraryRuntimeRecord), [libraryRuntimeRecord]);
   const libraryOverview = useMemo(() => getLibraryOverview(libraryRuntimeRecord), [libraryRuntimeRecord]);
+  const getBackupPayload = () =>
+    createAppBackupPayload({
+      profile,
+      courseRuntime: runtimeRecord,
+      libraryRuntime: libraryRuntimeRecord,
+    });
 
   const openCourse = (courseId: string) => {
     setActiveTab('courses');
@@ -72,6 +87,15 @@ function App() {
         [resourceId]: updater(runtime),
       };
     });
+  };
+
+  const restoreBackup = (payload: AppBackupPayload) => {
+    setProfile(payload.profile);
+    setRuntimeRecord(payload.courseRuntime);
+    setLibraryRuntimeRecord(payload.libraryRuntime);
+    setSelectedCourseId(null);
+    setSelectedResourceId(null);
+    setActiveTab('profile');
   };
 
   const tabContent = useMemo(() => {
@@ -120,6 +144,8 @@ function App() {
             recentViewedResources={recentViewedResources}
             libraryViewedCount={libraryOverview.viewedCount}
             libraryFavoriteCount={libraryOverview.favoriteCount}
+            createBackupPayload={getBackupPayload}
+            onRestoreBackup={restoreBackup}
             onOpenCourse={openCourse}
             onOpenResource={openResource}
           />

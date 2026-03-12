@@ -118,6 +118,14 @@ export type ProfileState = {
   location: string;
 };
 
+export type AppBackupPayload = {
+  version: 1;
+  exportedAt: string;
+  profile: ProfileState;
+  courseRuntime: CourseRuntimeRecord;
+  libraryRuntime: LibraryRuntimeRecord;
+};
+
 export type LibraryCategory = 'featured' | 'research' | 'audio' | 'archive';
 
 export type LibraryResource = {
