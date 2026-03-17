@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import type { KeyboardEvent } from 'react';
 import { usePersistentState } from '../../hooks/usePersistentState';
 import { ChatMessage, ConversationPreview } from '../../types/app';
 import { createOutgoingMessage } from './communityState';
@@ -19,6 +20,7 @@ export function ChatView({
   onToggleMuted: () => void;
 }) {
   const [drafts, setDrafts] = usePersistentState<Record<string, string>>('amas_community_chat_drafts', {});
+  const messageListRef = useRef<HTMLElement | null>(null);
   const draft = drafts[conversation.id] ?? '';
   const myMessageCount = useMemo(() => messages.filter((message) => message.sender === 'me').length, [messages]);
   const otherMessageCount = useMemo(() => messages.filter((message) => message.sender === 'other').length, [messages]);
@@ -37,6 +39,17 @@ export function ChatView({
     }
   }, [conversation.id, drafts, setDrafts]);
 
+  useEffect(() => {
+    if (!messageListRef.current) {
+      return;
+    }
+
+    messageListRef.current.scrollTo({
+      top: messageListRef.current.scrollHeight,
+      behavior: 'smooth',
+    });
+  }, [messages]);
+
   const handleSend = () => {
     const content = draft.trim();
     if (!content) {
@@ -45,6 +58,17 @@ export function ChatView({
 
     onSend(createOutgoingMessage(content));
     setDrafts((current) => ({ ...current, [conversation.id]: '' }));
+  };
+
+  const handleDraftKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      handleSend();
+    }
   };
 
   return (
@@ -90,7 +114,7 @@ export function ChatView({
         </div>
       </section>
 
-      <section className="chat-message-list">
+      <section ref={messageListRef} className="chat-message-list">
         {messages.map((message) => (
           <article key={message.id} className={message.sender === 'me' ? 'chat-bubble me' : 'chat-bubble other'}>
             <p>{message.content}</p>
@@ -112,11 +136,12 @@ export function ChatView({
                 [conversation.id]: event.target.value,
               }))
             }
+            onKeyDown={handleDraftKeyDown}
             placeholder="继续恢复聊天链路，例如：补通知跳转、已读状态或会话映射。"
           />
         </label>
         <div className="chat-input-actions">
-          <span className="toolbar-helper">当前草稿会按会话保存，后续会继续接入真实聊天服务层和返回状态记忆。</span>
+          <span className="toolbar-helper">当前草稿会按会话保存，按 Cmd/Ctrl + Enter 可快速发送。</span>
           <button type="button" className="primary-btn compact-btn" onClick={handleSend}>
             发送
           </button>

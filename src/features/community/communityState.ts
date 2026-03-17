@@ -1,20 +1,17 @@
 import { ChatMessage, CommunityContact, CommunityNotification, ConversationPreview } from '../../types/app';
 
-function getConversationTimeRank(time: string) {
-  if (time.includes(':')) {
-    return 4;
-  }
-  if (time.includes('刚刚') || time.includes('分钟') || time.includes('小时')) {
-    return 3;
-  }
-  if (time.includes('昨天')) {
-    return 2;
-  }
-  if (time.includes('周') || time.includes('星期')) {
-    return 1;
-  }
-  return 0;
-}
+const weekdayMap: Record<string, number> = {
+  日: 0,
+  天: 0,
+  一: 1,
+  二: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+};
+
+type NotificationFilterKey = 'all' | 'unread' | 'interaction' | 'system';
 
 export function formatConversationTime(date = new Date()) {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -22,6 +19,78 @@ export function formatConversationTime(date = new Date()) {
     minute: '2-digit',
     hour12: false,
   }).format(date);
+}
+
+function parseClock(value: string) {
+  const match = value.match(/(\d{1,2}):(\d{2})/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    hour: Number(match[1]),
+    minute: Number(match[2]),
+  };
+}
+
+function withClock(date: Date, value: string) {
+  const clock = parseClock(value);
+  const next = new Date(date);
+  next.setHours(clock?.hour ?? 12, clock?.minute ?? 0, 0, 0);
+  return next.getTime();
+}
+
+function mostRecentWeekday(now: Date, weekday: number) {
+  const date = new Date(now);
+  date.setHours(0, 0, 0, 0);
+  const diff = (7 + date.getDay() - weekday) % 7;
+  date.setDate(date.getDate() - diff);
+  return date;
+}
+
+export function getDisplayTimeSortValue(value: string, now = new Date()) {
+  const text = value.trim();
+  if (!text) {
+    return 0;
+  }
+
+  if (text === '刚刚') {
+    return now.getTime();
+  }
+
+  const minuteMatch = text.match(/(\d+)\s*分钟前/);
+  if (minuteMatch) {
+    return now.getTime() - Number(minuteMatch[1]) * 60_000;
+  }
+
+  const hourMatch = text.match(/(\d+)\s*小时前/);
+  if (hourMatch) {
+    return now.getTime() - Number(hourMatch[1]) * 3_600_000;
+  }
+
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+
+  if (/^今天/.test(text)) {
+    return withClock(todayStart, text);
+  }
+
+  if (/^昨天/.test(text)) {
+    const yesterday = new Date(todayStart);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return withClock(yesterday, text);
+  }
+
+  const weekdayMatch = text.match(/^(?:周|星期)([一二三四五六日天])/);
+  if (weekdayMatch) {
+    return withClock(mostRecentWeekday(now, weekdayMap[weekdayMatch[1]]), text);
+  }
+
+  if (/^\d{1,2}:\d{2}$/.test(text)) {
+    return withClock(todayStart, text);
+  }
+
+  return 0;
 }
 
 export function sortConversations(conversations: ConversationPreview[], keyword: string) {
@@ -57,12 +126,48 @@ export function sortConversations(conversations: ConversationPreview[], keyword:
         return right.unread - left.unread;
       }
 
-      const timeDiff = getConversationTimeRank(right.time) - getConversationTimeRank(left.time);
+      const timeDiff = getDisplayTimeSortValue(right.time) - getDisplayTimeSortValue(left.time);
       if (timeDiff !== 0) {
         return timeDiff;
       }
 
       return left.name.localeCompare(right.name, 'zh-CN');
+    });
+}
+
+export function sortNotifications(notifications: CommunityNotification[], filter: NotificationFilterKey) {
+  const typeOrder: Record<CommunityNotification['type'], number> = {
+    interaction: 0,
+    system: 1,
+  };
+
+  return [...notifications]
+    .filter((item) => {
+      if (filter === 'all') {
+        return true;
+      }
+      if (filter === 'unread') {
+        return !item.read;
+      }
+      return item.type === filter;
+    })
+    .sort((left, right) => {
+      const unreadDiff = Number(!right.read) - Number(!left.read);
+      if (unreadDiff !== 0) {
+        return unreadDiff;
+      }
+
+      const timeDiff = getDisplayTimeSortValue(right.time) - getDisplayTimeSortValue(left.time);
+      if (timeDiff !== 0) {
+        return timeDiff;
+      }
+
+      const typeDiff = typeOrder[left.type] - typeOrder[right.type];
+      if (typeDiff !== 0) {
+        return typeDiff;
+      }
+
+      return left.title.localeCompare(right.title, 'zh-CN');
     });
 }
 

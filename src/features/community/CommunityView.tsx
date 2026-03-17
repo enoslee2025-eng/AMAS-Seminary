@@ -1,14 +1,26 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { communityChatMessages, communityContacts, communityConversations, communityNotifications, communityPosts, courses } from '../../data/mockData';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+import { communityChatMessages, communityContacts, courses, libraryResources } from '../../data/mockData';
 import { usePersistentState } from '../../hooks/usePersistentState';
-import { ChatMessage, CommunityContact, CommunityNotification, CommunityNotificationType } from '../../types/app';
+import {
+  ChatMessage,
+  CommunityContact,
+  CommunityNotification,
+  CommunityNotificationType,
+  CommunityPostPreview,
+  ConversationPreview,
+} from '../../types/app';
 import { ChatView } from './ChatView';
+import { createProcessedQueueLogItem } from '../profile/profileState';
+import { useProcessedQueueLog } from '../profile/useProcessedQueueLog';
 import {
   buildConversationFromContact,
   buildConversationNotification,
   createAutoReplyMessage,
   createContactIntroMessage,
   filterContacts,
+  getDisplayTimeSortValue,
+  sortNotifications,
   getContactConversationId,
   sortConversations,
 } from './communityState';
@@ -16,25 +28,52 @@ import {
 type CommunitySection = 'feed' | 'conversations' | 'notifications';
 type FeedFilter = 'all' | '课程感悟' | '代祷实践' | '系统公告' | '恢复记录';
 type NotificationFilter = 'all' | 'unread' | 'interaction' | 'system';
+type PostFollowUpAction =
+  | { kind: 'contact'; label: string; contact: CommunityContact }
+  | { kind: 'conversation'; label: string; conversationId: string };
 
-export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: string) => void }) {
+export function CommunityView({
+  onOpenCourse,
+  onOpenResource,
+  courseFocus,
+  inboxIntent,
+  posts,
+  onUpdatePosts,
+  conversations,
+  onUpdateConversations,
+  notifications,
+  onUpdateNotifications,
+}: {
+  onOpenCourse: (courseId: string) => void;
+  onOpenResource: (resourceId: string) => void;
+  courseFocus: { courseId: string; token: number; mode: 'feed' | 'compose'; draft?: string } | null;
+  inboxIntent: { token: number; section: 'conversations' | 'notifications'; conversationId?: string; notificationId?: string } | null;
+  posts: CommunityPostPreview[];
+  onUpdatePosts: Dispatch<SetStateAction<CommunityPostPreview[]>>;
+  conversations: ConversationPreview[];
+  onUpdateConversations: Dispatch<SetStateAction<ConversationPreview[]>>;
+  notifications: CommunityNotification[];
+  onUpdateNotifications: Dispatch<SetStateAction<CommunityNotification[]>>;
+}) {
   const [activeSection, setActiveSection] = usePersistentState<CommunitySection>('amas_community_section', 'feed');
   const [selectedConversationId, setSelectedConversationId] = usePersistentState<string | null>('amas_community_selected_conversation', null);
   const [chatReturnSection, setChatReturnSection] = usePersistentState<CommunitySection>('amas_community_chat_return_section', 'conversations');
   const [highlightedPostId, setHighlightedPostId] = usePersistentState<string | null>('amas_community_highlight_post', null);
   const [feedFilter, setFeedFilter] = usePersistentState<FeedFilter>('amas_community_feed_filter', 'all');
+  const [activeCourseContextId, setActiveCourseContextId] = usePersistentState<string | null>('amas_community_course_context', null);
   const [conversationSearch, setConversationSearch] = usePersistentState('amas_community_conversation_search', '');
   const [contactSearch, setContactSearch] = usePersistentState('amas_community_contact_search', '');
   const [notificationFilter, setNotificationFilter] = usePersistentState<NotificationFilter>('amas_community_notification_filter', 'all');
-  const [notifications, setNotifications] = usePersistentState<CommunityNotification[]>('amas_community_notifications', communityNotifications);
   const [chatMessages, setChatMessages] = usePersistentState<Record<string, ChatMessage[]>>('amas_community_chat_messages', communityChatMessages);
-  const [posts, setPosts] = usePersistentState('amas_community_posts', communityPosts);
-  const [conversations, setConversations] = usePersistentState('amas_community_conversations', communityConversations);
   const [composerText, setComposerText] = usePersistentState('amas_community_composer_text', '');
   const [composerCourseId, setComposerCourseId] = usePersistentState<string>('amas_community_composer_course', '');
   const [activeCommentPostId, setActiveCommentPostId] = usePersistentState<string | null>('amas_community_comment_post', null);
   const [commentDrafts, setCommentDrafts] = usePersistentState<Record<string, string>>('amas_community_comment_drafts', {});
+  const [highlightedNotificationId, setHighlightedNotificationId] = useState<string | null>(null);
+  const [, , appendProcessedQueueLog] = useProcessedQueueLog();
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedConversationIdRef = useRef<string | null>(selectedConversationId);
+  const conversationsRef = useRef<ConversationPreview[]>(conversations);
   const replyTimersRef = useRef<number[]>([]);
   const unreadCount = conversations.reduce((sum, item) => sum + item.unread, 0);
   const unreadNotifications = notifications.filter((item) => !item.read).length;
@@ -42,9 +81,21 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
     () => conversations.find((item) => item.id === selectedConversationId) ?? null,
     [conversations, selectedConversationId],
   );
+  const courseContext = useMemo(
+    () => (activeCourseContextId ? courses.find((item) => item.id === activeCourseContextId) ?? null : null),
+    [activeCourseContextId],
+  );
+  const relatedResources = useMemo(
+    () => (activeCourseContextId ? libraryResources.filter((resource) => resource.relatedCourseId === activeCourseContextId) : []),
+    [activeCourseContextId],
+  );
   const filteredPosts = useMemo(
     () => (feedFilter === 'all' ? posts : posts.filter((item) => item.badge === feedFilter)),
     [feedFilter, posts],
+  );
+  const visibleFeedPosts = useMemo(
+    () => (activeCourseContextId ? filteredPosts.filter((item) => item.courseId === activeCourseContextId) : filteredPosts),
+    [activeCourseContextId, filteredPosts],
   );
   const courseInsightRows = useMemo(() => {
     const counts = posts.reduce<Record<string, number>>((accumulator, post) => {
@@ -67,6 +118,10 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
 
   const visibleConversations = useMemo(() => sortConversations(conversations, conversationSearch), [conversationSearch, conversations]);
   const visibleContacts = useMemo(() => filterContacts(communityContacts, contactSearch), [contactSearch]);
+  const adminConversationId = useMemo(
+    () => conversations.find((item) => item.id === 'conv-1' || item.name.includes('教务') || item.role === 'Admin')?.id ?? null,
+    [conversations],
+  );
 
   const notificationOverview = useMemo(
     () => ({
@@ -78,27 +133,29 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
   );
 
   const filteredNotifications = useMemo(() => {
-    const order: Record<CommunityNotificationType, number> = {
-      interaction: 0,
-      system: 1,
-    };
-
-    return [...notifications]
-      .filter((item) => {
-        if (notificationFilter === 'all') {
-          return true;
-        }
-        if (notificationFilter === 'unread') {
-          return !item.read;
-        }
-        return item.type === notificationFilter;
-      })
-      .sort((left, right) => order[left.type] - order[right.type]);
+    return sortNotifications(notifications, notificationFilter);
   }, [notificationFilter, notifications]);
+  const nextUnreadNotification = useMemo(() => sortNotifications(notifications, 'unread')[0] ?? null, [notifications]);
+  const topUnreadConversation = useMemo(
+    () =>
+      [...conversations]
+        .filter((conversation) => conversation.unread > 0)
+        .sort((left, right) => {
+          if (right.unread !== left.unread) {
+            return right.unread - left.unread;
+          }
+
+          return getDisplayTimeSortValue(right.time) - getDisplayTimeSortValue(left.time);
+        })[0] ?? null,
+    [conversations],
+  );
 
   const prependNotification = (notification: CommunityNotification) => {
-    setNotifications((current) => [notification, ...current]);
+    onUpdateNotifications((current) => [notification, ...current]);
   };
+
+  const truncateProcessedText = (value: string, maxLength = 36) =>
+    value.length > maxLength ? `${value.slice(0, maxLength).trim()}...` : value;
 
   const createNotification = (
     title: string,
@@ -115,8 +172,66 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
     ...extras,
   });
 
+  const logLearningAction = (title: string, detail: string, actionLabel: string) => {
+    appendProcessedQueueLog(
+      createProcessedQueueLogItem({
+        category: 'learning',
+        title,
+        detail,
+        actionLabel,
+      }),
+    );
+  };
+
+  const logReminderAction = (title: string, detail: string, actionLabel: string, impactCount = 1) => {
+    appendProcessedQueueLog(
+      createProcessedQueueLogItem({
+        category: 'reminder',
+        title,
+        detail,
+        actionLabel,
+        impactCount,
+      }),
+    );
+  };
+
+  const findContactByName = (name: string) =>
+    communityContacts.find((contact) => contact.name.trim().toLowerCase() === name.trim().toLowerCase()) ?? null;
+
+  const resolvePostFollowUpAction = (post: CommunityPostPreview): PostFollowUpAction | null => {
+    const exactAuthorContact = findContactByName(post.author);
+    if (exactAuthorContact) {
+      return {
+        kind: 'contact',
+        label: '联系作者',
+        contact: exactAuthorContact,
+      };
+    }
+
+    if (post.courseId) {
+      const relatedContact = communityContacts.find((contact) => contact.relatedCourseId === post.courseId) ?? null;
+      if (relatedContact) {
+        return {
+          kind: 'contact',
+          label: '联系相关同工',
+          contact: relatedContact,
+        };
+      }
+    }
+
+    if (!post.courseId && post.author.includes('教务') && adminConversationId) {
+      return {
+        kind: 'conversation',
+        label: '打开教务通知',
+        conversationId: adminConversationId,
+      };
+    }
+
+    return null;
+  };
+
   const touchConversation = (conversationId: string, patch: Partial<(typeof conversations)[number]>) => {
-    setConversations((current) => {
+    onUpdateConversations((current) => {
       const target = current.find((item) => item.id === conversationId);
       if (!target) {
         return current;
@@ -128,32 +243,51 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
   };
 
   const updateConversationFlags = (conversationId: string, patch: Partial<(typeof conversations)[number]>) => {
-    setConversations((current) => current.map((item) => (item.id === conversationId ? { ...item, ...patch } : item)));
+    onUpdateConversations((current) => current.map((item) => (item.id === conversationId ? { ...item, ...patch } : item)));
   };
 
   const handleOpenConversation = (conversationId: string) => {
+    const conversation = conversations.find((item) => item.id === conversationId) ?? null;
     setChatReturnSection(activeSection);
     setSelectedConversationId(conversationId);
-    setConversations((current) => current.map((item) => (item.id === conversationId ? { ...item, unread: 0 } : item)));
-    setNotifications((current) =>
+    onUpdateConversations((current) => current.map((item) => (item.id === conversationId ? { ...item, unread: 0 } : item)));
+    onUpdateNotifications((current) =>
       current.map((item) => (item.conversationId === conversationId ? { ...item, read: true } : item)),
     );
+
+    if (conversation && conversation.unread > 0) {
+      logReminderAction(
+        `处理会话未读：${conversation.name}`,
+        truncateProcessedText(conversation.subtitle),
+        '清空未读',
+        conversation.unread,
+      );
+    }
   };
 
   const handleNotificationClick = (notification: CommunityNotification) => {
-    setNotifications((current) =>
+    const wasUnread = !notification.read;
+    onUpdateNotifications((current) =>
       current.map((item) => (item.id === notification.id ? { ...item, read: true } : item)),
     );
 
     if (notification.postId) {
+      const relatedPost = posts.find((item) => item.id === notification.postId) ?? null;
       setFeedFilter('all');
+      setActiveCourseContextId(notification.courseId ?? relatedPost?.courseId ?? null);
       setHighlightedPostId(notification.postId);
       setActiveCommentPostId(notification.postId);
       setActiveSection('feed');
+      if (wasUnread) {
+        logReminderAction(notification.title, truncateProcessedText(notification.detail), '处理通知');
+      }
       return;
     }
 
     if (notification.courseId) {
+      if (wasUnread) {
+        logReminderAction(notification.title, truncateProcessedText(notification.detail), '处理通知');
+      }
       onOpenCourse(notification.courseId);
       return;
     }
@@ -162,10 +296,31 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
       handleOpenConversation(notification.conversationId);
       return;
     }
+
+    if (wasUnread) {
+      logReminderAction(notification.title, truncateProcessedText(notification.detail), '处理通知');
+    }
   };
 
   const handleMarkAllNotificationsRead = () => {
-    setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+    const unreadNotificationCount = notifications.filter((item) => !item.read).length;
+    onUpdateNotifications((current) => current.map((item) => ({ ...item, read: true })));
+
+    if (unreadNotificationCount > 0) {
+      logReminderAction('批量处理通知', '通知中心里的未读项已全部标记为已读。', '全部标为已读', unreadNotificationCount);
+    }
+  };
+
+  const handleClearAllReminders = () => {
+    const totalReminderCount =
+      conversations.reduce((sum, item) => sum + item.unread, 0) + notifications.filter((item) => !item.read).length;
+    onUpdateConversations((current) => current.map((item) => ({ ...item, unread: 0 })));
+    onUpdateNotifications((current) => current.map((item) => ({ ...item, read: true })));
+    setHighlightedNotificationId(null);
+
+    if (totalReminderCount > 0) {
+      logReminderAction('批量清空社区提醒', '最近消息和通知中心的未读提醒已一次性清理完成。', '清空全部提醒', totalReminderCount);
+    }
   };
 
   const handleStartConversation = (contact: CommunityContact) => {
@@ -177,7 +332,7 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
     if (!existingConversation) {
       const introMessage = createContactIntroMessage(contact);
 
-      setConversations((current) => [buildConversationFromContact(contact), ...current.filter((item) => item.id !== conversationId)]);
+      onUpdateConversations((current) => [buildConversationFromContact(contact), ...current.filter((item) => item.id !== conversationId)]);
       setChatMessages((current) => ({
         ...current,
         [conversationId]: current[conversationId] ?? [introMessage],
@@ -196,11 +351,7 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
     }
 
     setChatReturnSection('conversations');
-    setSelectedConversationId(conversationId);
-    setConversations((current) => current.map((item) => (item.id === conversationId ? { ...item, unread: 0 } : item)));
-    setNotifications((current) =>
-      current.map((item) => (item.conversationId === conversationId ? { ...item, read: true } : item)),
-    );
+    handleOpenConversation(conversationId);
   };
 
   const handleSendMessage = (conversationId: string, message: ChatMessage) => {
@@ -214,18 +365,21 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
       unread: 0,
     });
 
-    const conversation = conversations.find((item) => item.id === conversationId);
+    const conversation = conversationsRef.current.find((item) => item.id === conversationId);
     if (!conversation) {
       return;
     }
 
+    logLearningAction(`回复会话：${conversation.name}`, truncateProcessedText(message.content), '发送消息');
+
     const timer = window.setTimeout(() => {
-      const reply = createAutoReplyMessage(conversation);
+      const latestConversation = conversationsRef.current.find((item) => item.id === conversationId) ?? conversation;
+      const reply = createAutoReplyMessage(latestConversation);
       setChatMessages((current) => ({
         ...current,
         [conversationId]: [...(current[conversationId] ?? []), reply],
       }));
-      setConversations((current) => {
+      onUpdateConversations((current) => {
         const target = current.find((item) => item.id === conversationId);
         if (!target) {
           return current;
@@ -242,9 +396,11 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
         return [next, ...current.filter((item) => item.id !== conversationId)];
       });
 
-      if (selectedConversationIdRef.current !== conversationId && !conversation.muted) {
-        prependNotification(buildConversationNotification(conversation, reply));
+      if (selectedConversationIdRef.current !== conversationId && !latestConversation.muted) {
+        prependNotification(buildConversationNotification(latestConversation, reply));
       }
+
+      replyTimersRef.current = replyTimersRef.current.filter((item) => item !== timer);
     }, 1200);
 
     replyTimersRef.current.push(timer);
@@ -253,6 +409,98 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
   useEffect(() => {
     selectedConversationIdRef.current = selectedConversationId;
   }, [selectedConversationId]);
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
+
+  useEffect(() => {
+    if (!courseFocus) {
+      return;
+    }
+
+    setActiveSection('feed');
+    setFeedFilter('all');
+    setActiveCourseContextId(courseFocus.courseId);
+    setComposerCourseId(courseFocus.courseId);
+    setActiveCommentPostId(null);
+    if (courseFocus.mode === 'compose' && courseFocus.draft) {
+      setComposerText((current) => (current.trim() ? current : courseFocus.draft ?? ''));
+    }
+
+    const relatedPost = posts.find((item) => item.courseId === courseFocus.courseId) ?? null;
+    setHighlightedPostId(relatedPost?.id ?? null);
+    if (courseFocus.mode === 'compose') {
+      window.requestAnimationFrame(() => {
+        composerTextareaRef.current?.focus();
+        composerTextareaRef.current?.setSelectionRange(
+          composerTextareaRef.current.value.length,
+          composerTextareaRef.current.value.length,
+        );
+      });
+    }
+  }, [
+    courseFocus?.courseId,
+    courseFocus?.draft,
+    courseFocus?.mode,
+    courseFocus?.token,
+    setActiveCommentPostId,
+    setActiveSection,
+    setComposerCourseId,
+    setComposerText,
+    setFeedFilter,
+    setHighlightedPostId,
+    setActiveCourseContextId,
+  ]);
+
+  useEffect(() => {
+    if (!inboxIntent) {
+      return;
+    }
+
+    setActiveCourseContextId(null);
+    setHighlightedPostId(null);
+    setActiveCommentPostId(null);
+
+    if (inboxIntent.section === 'notifications') {
+      setSelectedConversationId(null);
+      setActiveSection('notifications');
+      setChatReturnSection('notifications');
+      setNotificationFilter('all');
+      setHighlightedNotificationId(inboxIntent.notificationId ?? null);
+
+      return;
+    }
+
+    setHighlightedNotificationId(null);
+
+    if (inboxIntent.conversationId) {
+      setActiveSection('conversations');
+      setChatReturnSection('conversations');
+      setSelectedConversationId(inboxIntent.conversationId);
+      onUpdateConversations((current) =>
+        current.map((item) => (item.id === inboxIntent.conversationId ? { ...item, unread: 0 } : item)),
+      );
+      onUpdateNotifications((current) =>
+        current.map((item) => (item.conversationId === inboxIntent.conversationId ? { ...item, read: true } : item)),
+      );
+      return;
+    }
+
+    setSelectedConversationId(null);
+    setActiveSection('conversations');
+  }, [
+    inboxIntent,
+    onUpdateConversations,
+    onUpdateNotifications,
+    setActiveCommentPostId,
+    setActiveCourseContextId,
+    setActiveSection,
+    setChatReturnSection,
+    setHighlightedPostId,
+    setNotificationFilter,
+    setSelectedConversationId,
+  ]);
 
   useEffect(() => {
     if (activeSection !== 'feed' || !highlightedPostId) {
@@ -267,6 +515,20 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
       window.clearTimeout(cleanup);
     };
   }, [activeSection, highlightedPostId, setHighlightedPostId]);
+
+  useEffect(() => {
+    if (activeSection !== 'notifications' || !highlightedNotificationId) {
+      return;
+    }
+
+    const cleanup = window.setTimeout(() => {
+      setHighlightedNotificationId(null);
+    }, 3200);
+
+    return () => {
+      window.clearTimeout(cleanup);
+    };
+  }, [activeSection, highlightedNotificationId]);
 
   useEffect(() => () => {
     replyTimersRef.current.forEach((timer) => window.clearTimeout(timer));
@@ -363,6 +625,7 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
             <label className="chat-input-field" htmlFor="community-compose-text">
               <span>动态内容</span>
               <textarea
+                ref={composerTextareaRef}
                 id="community-compose-text"
                 rows={4}
                 value={composerText}
@@ -387,7 +650,11 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
               </select>
             </label>
             <div className="chat-input-actions">
-              <span className="toolbar-helper">动态会先保存在本地状态，后面再接通知和评论联动。</span>
+              <span className="toolbar-helper">
+                {courseContext
+                  ? `当前正在为《${courseContext.title}》撰写内容，发布后会自动归到这门课的讨论流。`
+                  : '动态会先保存在本地状态，后面再接通知和评论联动。'}
+              </span>
               <button
                 type="button"
                 className="primary-btn compact-btn"
@@ -398,7 +665,8 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
                   }
 
                   const postId = `post-${Date.now()}`;
-                  setPosts((current) => [
+                  const nextCourseContextId = composerCourseId || activeCourseContextId;
+                  onUpdatePosts((current) => [
                     {
                       id: postId,
                       author: 'Enos Lee',
@@ -426,8 +694,17 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
                       },
                     ),
                   );
+                  logLearningAction(
+                    composerCourseId ? '发布课程感悟' : '发布恢复记录',
+                    truncateProcessedText(content),
+                    '发布动态',
+                  );
+                  if (nextCourseContextId) {
+                    setActiveCourseContextId(nextCourseContextId);
+                  }
+                  setHighlightedPostId(postId);
                   setComposerText('');
-                  setComposerCourseId('');
+                  setComposerCourseId(nextCourseContextId ?? '');
                 }}
               >
                 发布动态
@@ -454,6 +731,62 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
               ))}
             </div>
           </section>
+          {courseContext && (
+            <section className="content-card">
+              <div className="module-header">
+                <div>
+                  <p className="eyebrow">Course Context</p>
+                  <h2>当前课程讨论</h2>
+                </div>
+              </div>
+              <div className="post-footer">
+                <span>
+                  正在查看《{courseContext.title}》的相关动态，共 {visibleFeedPosts.length} 条，新的发布也会默认关联这门课程。
+                </span>
+                <div className="contact-card-actions">
+                  <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCourse(courseContext.id)}>
+                    回到课程详情
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn compact-btn"
+                    onClick={() => {
+                      setActiveCourseContextId(null);
+                      setHighlightedPostId(null);
+                    }}
+                  >
+                    查看全部动态
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+          {courseContext && relatedResources.length > 0 && (
+            <section className="content-card">
+              <div className="module-header">
+                <div>
+                  <p className="eyebrow">Course Resources</p>
+                  <h2>相关资料</h2>
+                </div>
+              </div>
+              <div className="archive-list">
+                {relatedResources.map((resource) => (
+                  <button key={resource.id} type="button" className="archive-item" onClick={() => onOpenResource(resource.id)}>
+                    <div>
+                      <p className="post-author">{resource.title}</p>
+                      <p className="post-role">
+                        {resource.author} · {resource.format}
+                      </p>
+                    </div>
+                    <div className="archive-meta">
+                      <strong>{resource.updatedAt}</strong>
+                      <span>返回图书馆可继续阅读这份资料</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
           {courseInsightRows.length > 0 && (
             <section className="content-card">
               <div className="module-header">
@@ -478,154 +811,184 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
               </div>
             </section>
           )}
-          {filteredPosts.map((post) => (
-            <article className={highlightedPostId === post.id ? 'module-card post-card highlighted' : 'module-card post-card'} key={post.id}>
-              <div className="post-meta">
-                <div>
-                  <p className="post-author">{post.author}</p>
-                  <p className="post-role">{post.role}</p>
-                </div>
-                <span className="course-updated">{post.time}</span>
-              </div>
-              <span className="post-badge">{post.badge}</span>
-              <p className="post-content">{post.content}</p>
-              <div className="post-actions">
-                <button
-                  type="button"
-                  className={post.liked ? 'chip-btn active' : 'chip-btn'}
-                  onClick={() => {
-                    const nextLiked = !post.liked;
-                    if (nextLiked) {
-                      prependNotification(
-                        createNotification(
-                          `互动已记录：赞了 ${post.author}`,
-                          '这条通知用于模拟未来后端回执，后续会继续接互动高亮和跳转。',
-                          'interaction',
-                          {
-                            ...(post.courseId ? { courseId: post.courseId } : undefined),
-                            postId: post.id,
-                          },
-                        ),
-                      );
-                    }
+          {visibleFeedPosts.length > 0 ? (
+            visibleFeedPosts.map((post) => {
+              const followUpAction = resolvePostFollowUpAction(post);
 
-                    setPosts((current) =>
-                      current.map((item) =>
-                        item.id === post.id
-                          ? {
-                              ...item,
-                              liked: nextLiked,
-                              likes: nextLiked ? item.likes + 1 : Math.max(0, item.likes - 1),
-                            }
-                          : item,
-                      ),
-                    );
-                  }}
-                >
-                  赞 {post.likes}
-                </button>
-                <button
-                  type="button"
-                  className={activeCommentPostId === post.id ? 'chip-btn active' : 'chip-btn'}
-                  onClick={() => setActiveCommentPostId((current) => (current === post.id ? null : post.id))}
-                >
-                  评论 {post.comments.length}
-                </button>
-              </div>
-              {post.courseId ? (
-                <div className="post-footer">
-                  <span>已关联课程内容，可直接跳回课程详情继续恢复链路。</span>
-                  <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCourse(post.courseId!)}>
-                    打开关联课程
-                  </button>
-                </div>
-              ) : (
-                <div className="post-footer">
-                  <span>这条内容当前作为系统信息源，后续会接入通知模块。</span>
-                </div>
-              )}
-              {activeCommentPostId === post.id && (
-                <div className="comment-panel">
-                  <div className="comment-list">
-                    {post.comments.length > 0 ? (
-                      post.comments.map((comment) => (
-                        <article key={comment.id} className="comment-item">
-                          <div className="comment-meta">
-                            <strong>{comment.author}</strong>
-                            <span>{comment.time}</span>
-                          </div>
-                          <p>{comment.content}</p>
-                        </article>
-                      ))
-                    ) : (
-                      <p className="toolbar-helper">还没有评论，可以先补一条讨论记录。</p>
-                    )}
+              return (
+                <article className={highlightedPostId === post.id ? 'module-card post-card highlighted' : 'module-card post-card'} key={post.id}>
+                <div className="post-meta">
+                  <div>
+                    <p className="post-author">{post.author}</p>
+                    <p className="post-role">{post.role}</p>
                   </div>
-                  <label className="chat-input-field" htmlFor={`comment-${post.id}`}>
-                    <span>添加评论</span>
-                    <textarea
-                      id={`comment-${post.id}`}
-                      rows={2}
-                      value={commentDrafts[post.id] ?? ''}
-                      onChange={(event) =>
-                        setCommentDrafts((current) => ({
-                          ...current,
-                          [post.id]: event.target.value,
-                        }))
-                      }
-                      placeholder="补充这条动态的讨论上下文。"
-                    />
-                  </label>
-                  <div className="chat-input-actions">
-                    <span className="toolbar-helper">评论会绑定到当前动态，后面会接通知提醒。</span>
-                    <button
-                      type="button"
-                      className="secondary-btn compact-btn"
-                      onClick={() => {
-                        const content = (commentDrafts[post.id] ?? '').trim();
-                        if (!content) {
-                          return;
-                        }
-
-                        setPosts((current) =>
-                          current.map((item) =>
-                            item.id === post.id
-                              ? {
-                                  ...item,
-                                  comments: [
-                                    ...item.comments,
-                                    {
-                                      id: `comment-${Date.now()}`,
-                                      author: 'Enos Lee',
-                                      content,
-                                      time: '刚刚',
-                                    },
-                                  ],
-                                }
-                              : item,
+                  <span className="course-updated">{post.time}</span>
+                </div>
+                <span className="post-badge">{post.badge}</span>
+                <p className="post-content">{post.content}</p>
+                <div className="post-actions">
+                  <button
+                    type="button"
+                    className={post.liked ? 'chip-btn active' : 'chip-btn'}
+                    onClick={() => {
+                      const nextLiked = !post.liked;
+                      if (nextLiked) {
+                        prependNotification(
+                          createNotification(
+                            `互动已记录：赞了 ${post.author}`,
+                            '这条通知用于模拟未来后端回执，后续会继续接互动高亮和跳转。',
+                            'interaction',
+                            {
+                              ...(post.courseId ? { courseId: post.courseId } : undefined),
+                              postId: post.id,
+                            },
                           ),
                         );
-                        prependNotification(
-                        createNotification(
-                          `已添加评论：${post.author}`,
-                          '评论已写入本地动态流，后续会继续接入回复提醒和通知筛选。',
-                          'interaction',
-                          {
-                            ...(post.courseId ? { courseId: post.courseId } : undefined),
-                            postId: post.id,
-                          },
+                      }
+
+                      onUpdatePosts((current) =>
+                        current.map((item) =>
+                          item.id === post.id
+                            ? {
+                                ...item,
+                                liked: nextLiked,
+                                likes: nextLiked ? item.likes + 1 : Math.max(0, item.likes - 1),
+                              }
+                            : item,
                         ),
                       );
-                      setCommentDrafts((current) => ({ ...current, [post.id]: '' }));
-                      }}
-                    >
-                      提交评论
-                    </button>
-                  </div>
+                    }}
+                  >
+                    赞 {post.likes}
+                  </button>
+                  <button
+                    type="button"
+                    className={activeCommentPostId === post.id ? 'chip-btn active' : 'chip-btn'}
+                    onClick={() => setActiveCommentPostId((current) => (current === post.id ? null : post.id))}
+                  >
+                    评论 {post.comments.length}
+                  </button>
                 </div>
-              )}
-            </article>
-          ))}
+                {post.courseId ? (
+                  <div className="post-footer">
+                    <span>已关联课程内容，可直接跳回课程详情继续恢复链路。</span>
+                    <div className="contact-card-actions">
+                      {followUpAction?.kind === 'contact' && (
+                        <button type="button" className="secondary-btn compact-btn" onClick={() => handleStartConversation(followUpAction.contact)}>
+                          {followUpAction.label}
+                        </button>
+                      )}
+                      <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCourse(post.courseId!)}>
+                        打开关联课程
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="post-footer">
+                    <span>这条内容当前作为系统信息源，后续会接入通知模块。</span>
+                    {followUpAction?.kind === 'conversation' && (
+                      <button type="button" className="secondary-btn compact-btn" onClick={() => handleOpenConversation(followUpAction.conversationId)}>
+                        {followUpAction.label}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {activeCommentPostId === post.id && (
+                  <div className="comment-panel">
+                    <div className="comment-list">
+                      {post.comments.length > 0 ? (
+                        post.comments.map((comment) => (
+                          <article key={comment.id} className="comment-item">
+                            <div className="comment-meta">
+                              <strong>{comment.author}</strong>
+                              <span>{comment.time}</span>
+                            </div>
+                            <p>{comment.content}</p>
+                          </article>
+                        ))
+                      ) : (
+                        <p className="toolbar-helper">还没有评论，可以先补一条讨论记录。</p>
+                      )}
+                    </div>
+                    <label className="chat-input-field" htmlFor={`comment-${post.id}`}>
+                      <span>添加评论</span>
+                      <textarea
+                        id={`comment-${post.id}`}
+                        rows={2}
+                        value={commentDrafts[post.id] ?? ''}
+                        onChange={(event) =>
+                          setCommentDrafts((current) => ({
+                            ...current,
+                            [post.id]: event.target.value,
+                          }))
+                        }
+                        placeholder="补充这条动态的讨论上下文。"
+                      />
+                    </label>
+                    <div className="chat-input-actions">
+                      <span className="toolbar-helper">评论会绑定到当前动态，后面会接通知提醒。</span>
+                      <button
+                        type="button"
+                        className="secondary-btn compact-btn"
+                        onClick={() => {
+                          const content = (commentDrafts[post.id] ?? '').trim();
+                          if (!content) {
+                            return;
+                          }
+
+                          onUpdatePosts((current) =>
+                            current.map((item) =>
+                              item.id === post.id
+                                ? {
+                                    ...item,
+                                    comments: [
+                                      ...item.comments,
+                                      {
+                                        id: `comment-${Date.now()}`,
+                                        author: 'Enos Lee',
+                                        content,
+                                        time: '刚刚',
+                                      },
+                                    ],
+                                  }
+                                : item,
+                            ),
+                          );
+                          prependNotification(
+                            createNotification(
+                              `已添加评论：${post.author}`,
+                              '评论已写入本地动态流，后续会继续接入回复提醒和通知筛选。',
+                              'interaction',
+                              {
+                                ...(post.courseId ? { courseId: post.courseId } : undefined),
+                                postId: post.id,
+                              },
+                            ),
+                          );
+                          logLearningAction(
+                            `评论了 ${post.author} 的动态`,
+                            truncateProcessedText(content),
+                            '提交评论',
+                          );
+                          setCommentDrafts((current) => ({ ...current, [post.id]: '' }));
+                        }}
+                      >
+                        提交评论
+                      </button>
+                    </div>
+                  </div>
+                )}
+                </article>
+              );
+            })
+          ) : (
+            <section className="content-card">
+              <div className="empty-state-card">
+                <strong>{courseContext ? '这门课还没有动态' : '当前筛选下没有动态'}</strong>
+                <span>{courseContext ? '你可以先发布一条关联本课程的感悟或恢复记录。' : '切回全部动态，或者先发布一条新的课程感悟与恢复记录。'}</span>
+              </div>
+            </section>
+          )}
         </section>
       ) : activeSection === 'conversations' ? (
         <section className="conversation-list">
@@ -757,11 +1120,90 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
               <strong>{notificationOverview.system}</strong>
             </article>
           </section>
+          <section className="content-card">
+            <div className="module-header">
+              <div>
+                <p className="eyebrow">Reminder Wind-down</p>
+                <h2>提醒收尾台</h2>
+              </div>
+            </div>
+            <div className="profile-highlight-grid">
+              <article className="detail-summary-card">
+                <span className="detail-summary-label">优先会话</span>
+                <strong>{topUnreadConversation?.name ?? '当前没有未读会话'}</strong>
+                <span>
+                  {topUnreadConversation
+                    ? `还有 ${topUnreadConversation.unread} 条未读消息，最近一条是“${topUnreadConversation.subtitle}”。`
+                    : '消息区已经比较干净，可以把注意力放回课程或互动通知。'}
+                </span>
+                {topUnreadConversation && (
+                  <div className="coach-card-actions">
+                    <button
+                      type="button"
+                      className="secondary-btn compact-btn"
+                      onClick={() => handleOpenConversation(topUnreadConversation.id)}
+                    >
+                      打开会话
+                    </button>
+                  </div>
+                )}
+              </article>
+              <article className="detail-summary-card">
+                <span className="detail-summary-label">优先通知</span>
+                <strong>{nextUnreadNotification?.title ?? '当前没有未读通知'}</strong>
+                <span>
+                  {nextUnreadNotification
+                    ? `${nextUnreadNotification.time} · ${nextUnreadNotification.detail}`
+                    : '通知中心已经处理完毕，新的互动或系统提醒会继续在这里汇总。'}
+                </span>
+                {nextUnreadNotification && (
+                  <div className="coach-card-actions">
+                    <button
+                      type="button"
+                      className="secondary-btn compact-btn"
+                      onClick={() => handleNotificationClick(nextUnreadNotification)}
+                    >
+                      处理这条通知
+                    </button>
+                  </div>
+                )}
+              </article>
+              <article className="detail-summary-card">
+                <span className="detail-summary-label">一键收尾</span>
+                <strong>{unreadCount + notificationOverview.unread}</strong>
+                <span>
+                  {unreadCount + notificationOverview.unread > 0
+                    ? '把最近消息和通知一起清掉，快速结束今天这轮提醒处理。'
+                    : '当前没有需要批量清空的提醒，已经适合进入课程复盘。'}
+                </span>
+                <div className="coach-card-actions">
+                  <button
+                    type="button"
+                    className="primary-btn compact-btn"
+                    onClick={handleClearAllReminders}
+                    disabled={unreadCount + notificationOverview.unread === 0}
+                  >
+                    清空全部提醒
+                  </button>
+                </div>
+              </article>
+            </div>
+          </section>
           <div className="notification-toolbar">
-            <p className="toolbar-helper">通知会按照互动 / 系统分组展示，并支持一键标记已读。</p>
-            <button type="button" className="secondary-btn compact-btn" onClick={handleMarkAllNotificationsRead}>
-              全部标为已读
-            </button>
+            <p className="toolbar-helper">通知会优先显示未读，再按时间顺序排序，也支持快速处理下一条。</p>
+            <div className="contact-card-actions">
+              {nextUnreadNotification && (
+                <button type="button" className="primary-btn compact-btn" onClick={() => handleNotificationClick(nextUnreadNotification)}>
+                  处理下一条未读
+                </button>
+              )}
+              <button type="button" className="secondary-btn compact-btn" onClick={handleClearAllReminders}>
+                清空全部提醒
+              </button>
+              <button type="button" className="secondary-btn compact-btn" onClick={handleMarkAllNotificationsRead}>
+                全部标为已读
+              </button>
+            </div>
           </div>
           <section className="content-card">
             <div className="module-header">
@@ -791,7 +1233,15 @@ export function CommunityView({ onOpenCourse }: { onOpenCourse: (courseId: strin
           {filteredNotifications.map((notification) => (
             <button
               type="button"
-              className={notification.read ? 'course-card notification-card' : 'course-card notification-card unread'}
+              className={
+                highlightedNotificationId === notification.id
+                  ? notification.read
+                    ? 'course-card notification-card highlighted'
+                    : 'course-card notification-card unread highlighted'
+                  : notification.read
+                    ? 'course-card notification-card'
+                    : 'course-card notification-card unread'
+              }
               key={notification.id}
               onClick={() => handleNotificationClick(notification)}
             >

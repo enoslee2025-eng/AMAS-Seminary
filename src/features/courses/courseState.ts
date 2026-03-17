@@ -161,6 +161,24 @@ export function toggleLessonCompleted(runtime: CourseRuntimeState, lessonId: str
   });
 }
 
+export function completeNextPendingLesson(course: CourseItem, runtime: CourseRuntimeState): CourseRuntimeState {
+  const pendingLesson = course.syllabus.find((lesson) => !runtime.completedLessonIds.includes(lesson.id));
+  if (!pendingLesson) {
+    return runtime;
+  }
+
+  const completedLessonIds = runtime.completedLessonIds.includes(pendingLesson.id)
+    ? runtime.completedLessonIds
+    : [...runtime.completedLessonIds, pendingLesson.id];
+  const nextPendingLesson = course.syllabus.find((lesson) => !completedLessonIds.includes(lesson.id)) ?? null;
+
+  return stampRuntime({
+    ...runtime,
+    currentLessonId: nextPendingLesson?.id ?? pendingLesson.id,
+    completedLessonIds,
+  });
+}
+
 export function toggleMaterialViewed(runtime: CourseRuntimeState, materialId: string): CourseRuntimeState {
   const viewedMaterialIds = runtime.viewedMaterialIds.includes(materialId)
     ? runtime.viewedMaterialIds.filter((id) => id !== materialId)

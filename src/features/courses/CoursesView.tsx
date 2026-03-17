@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { courseCategories, courses } from '../../data/mockData';
-import { CourseCategory, CourseRuntimeRecord, CourseRuntimeState } from '../../types/app';
+import { CommunityPostPreview, CourseCategory, CourseRuntimeRecord, CourseRuntimeState } from '../../types/app';
 import { usePersistentState } from '../../hooks/usePersistentState';
 import { CourseDetailView } from './CourseDetailView';
 import { buildDisplayCourses, DisplayCourse, getContinueLearningCourses } from './courseState';
@@ -10,11 +10,15 @@ export function CoursesView({
   onUpdateRuntime,
   selectedCourseId,
   onSelectCourse,
+  communityPosts,
+  onOpenCommunityCourse,
 }: {
   runtimeRecord: CourseRuntimeRecord;
   onUpdateRuntime: (courseId: string, updater: (current: CourseRuntimeState) => CourseRuntimeState) => void;
   selectedCourseId: string | null;
   onSelectCourse: (courseId: string | null) => void;
+  communityPosts: CommunityPostPreview[];
+  onOpenCommunityCourse: (courseId: string, options?: { mode?: 'feed' | 'compose'; draft?: string }) => void;
 }) {
   const [activeCategory, setActiveCategory] = usePersistentState<CourseCategory>('amas_courses_category', 'all');
   const [search, setSearch] = usePersistentState('amas_courses_search', '');
@@ -48,8 +52,12 @@ export function CoursesView({
 
     return displayCourses.find((course) => course.id === selectedCourseId) ?? null;
   }, [displayCourses, selectedCourseId]);
+  const selectedCoursePosts = useMemo(
+    () => (selectedCourse ? communityPosts.filter((post) => post.courseId === selectedCourse.id) : []),
+    [communityPosts, selectedCourse],
+  );
 
-  const highlightedCourse = filteredCourses[0] ?? displayCourses[0];
+  const highlightedCourse = filteredCourses[0] ?? null;
   const continueLearningCourses = useMemo(() => getContinueLearningCourses(displayCourses, 2), [displayCourses]);
 
   if (selectedCourse) {
@@ -61,24 +69,37 @@ export function CoursesView({
         recentLesson={selectedCourse.recentLessonLabel}
         onBack={() => onSelectCourse(null)}
         onUpdateRuntime={(updater) => onUpdateRuntime(selectedCourse.id, updater)}
+        communityPostCount={selectedCoursePosts.length}
+        latestCommunityPost={selectedCoursePosts[0] ?? null}
+        onOpenCommunity={() => onOpenCommunityCourse(selectedCourse.id)}
+        onComposeCommunityPost={(draft) => onOpenCommunityCourse(selectedCourse.id, { mode: 'compose', draft })}
       />
     );
   }
 
   return (
     <div className="courses-layout">
-      <section className={`course-hero-card tone-${highlightedCourse.coverTone}`}>
-        <div>
-          <p className="eyebrow">Academic Programs</p>
-          <h2>{highlightedCourse.title}</h2>
-          <p className="hero-copy">{highlightedCourse.summary}</p>
-        </div>
-        <div className="course-hero-meta">
-          <span>{highlightedCourse.degree}</span>
-          <span>{highlightedCourse.lessons} 课时</span>
-          <span>{highlightedCourse.progressValue}% 完成</span>
-        </div>
-      </section>
+      {highlightedCourse ? (
+        <section className={`course-hero-card tone-${highlightedCourse.coverTone}`}>
+          <div>
+            <p className="eyebrow">Academic Programs</p>
+            <h2>{highlightedCourse.title}</h2>
+            <p className="hero-copy">{highlightedCourse.summary}</p>
+          </div>
+          <div className="course-hero-meta">
+            <span>{highlightedCourse.degree}</span>
+            <span>{highlightedCourse.lessons} 课时</span>
+            <span>{highlightedCourse.progressValue}% 完成</span>
+          </div>
+        </section>
+      ) : (
+        <section className="content-card">
+          <div className="empty-state-card">
+            <strong>当前筛选下没有课程</strong>
+            <span>可以清空关键词，或者切换课程分类继续查找。</span>
+          </div>
+        </section>
+      )}
 
       {continueLearningCourses.length > 0 && (
         <section className="continue-learning-card">
@@ -125,33 +146,40 @@ export function CoursesView({
       </section>
 
       <section className="course-list">
-        {filteredCourses.map((course) => (
-          <article className="course-card" key={course.id}>
-            <div className="course-card-top">
-              <div>
-                <p className="course-degree">{course.degree}</p>
-                <h3>{course.title}</h3>
+        {filteredCourses.length > 0 ? (
+          filteredCourses.map((course) => (
+            <article className="course-card" key={course.id}>
+              <div className="course-card-top">
+                <div>
+                  <p className="course-degree">{course.degree}</p>
+                  <h3>{course.title}</h3>
+                </div>
+                <span className="course-updated">{course.updatedAt}</span>
               </div>
-              <span className="course-updated">{course.updatedAt}</span>
-            </div>
-            <p className="course-summary">{course.summary}</p>
-            <div className="course-progress-row">
-              <div className="progress-meta">
-                <strong>{course.progressValue}%</strong>
-                <span>最近学习：{course.recentLessonLabel}</span>
+              <p className="course-summary">{course.summary}</p>
+              <div className="course-progress-row">
+                <div className="progress-meta">
+                  <strong>{course.progressValue}%</strong>
+                  <span>最近学习：{course.recentLessonLabel}</span>
+                </div>
+                <button type="button" className="primary-btn compact-btn" onClick={() => onSelectCourse(course.id)}>
+                  {course.actionLabel}
+                </button>
               </div>
-              <button type="button" className="primary-btn compact-btn" onClick={() => onSelectCourse(course.id)}>
-                {course.actionLabel}
-              </button>
-            </div>
-            <div className="progress-bar">
-              <span style={{ width: `${course.progressValue}%` }} />
-            </div>
-            <p className="course-footer">
-              讲师：{course.instructor} · {course.completedLessonsCount}/{course.syllabus.length} 课时完成 · 资料已读 {course.viewedMaterialsCount} 份 · {course.lastStudiedLabel}
-            </p>
-          </article>
-        ))}
+              <div className="progress-bar">
+                <span style={{ width: `${course.progressValue}%` }} />
+              </div>
+              <p className="course-footer">
+                讲师：{course.instructor} · {course.completedLessonsCount}/{course.syllabus.length} 课时完成 · 资料已读 {course.viewedMaterialsCount} 份 · {course.lastStudiedLabel}
+              </p>
+            </article>
+          ))
+        ) : (
+          <div className="empty-state-card">
+            <strong>没有匹配的课程结果</strong>
+            <span>试试课程名、讲师或最近课题关键词。</span>
+          </div>
+        )}
       </section>
     </div>
   );

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CourseDetailTab, CourseItem, CourseRuntimeState } from '../../types/app';
+import { CommunityPostPreview, CourseDetailTab, CourseItem, CourseRuntimeState } from '../../types/app';
+import { createProcessedQueueLogItem } from '../profile/profileState';
+import { useProcessedQueueLog } from '../profile/useProcessedQueueLog';
 import {
   formatLastStudiedAt,
   getCompletedLessonsCount,
@@ -22,6 +24,10 @@ export function CourseDetailView({
   recentLesson,
   onBack,
   onUpdateRuntime,
+  communityPostCount,
+  latestCommunityPost,
+  onOpenCommunity,
+  onComposeCommunityPost,
 }: {
   course: CourseItem;
   runtime: CourseRuntimeState;
@@ -29,8 +35,13 @@ export function CourseDetailView({
   recentLesson: string;
   onBack: () => void;
   onUpdateRuntime: (updater: (current: CourseRuntimeState) => CourseRuntimeState) => void;
+  communityPostCount: number;
+  latestCommunityPost: CommunityPostPreview | null;
+  onOpenCommunity: () => void;
+  onComposeCommunityPost: (draft: string) => void;
 }) {
   const [activeTab, setActiveTabState] = useState<CourseDetailTab>(runtime.lastOpenedTab ?? 'overview');
+  const [, , appendProcessedQueueLog] = useProcessedQueueLog();
 
   useEffect(() => {
     setActiveTabState(runtime.lastOpenedTab ?? 'overview');
@@ -44,6 +55,39 @@ export function CourseDetailView({
   const completedLessons = useMemo(() => getCompletedLessonsCount(runtime), [runtime]);
   const currentLessonTitle =
     course.syllabus.find((lesson) => lesson.id === runtime.currentLessonId)?.title ?? recentLesson;
+  const suggestedCommunityDraft = useMemo(
+    () => `我正在学习《${course.title}》的「${currentLessonTitle}」，今天的一个收获是：`,
+    [course.title, currentLessonTitle],
+  );
+
+  const logLearningAction = (title: string, detail: string, actionLabel: string) => {
+    appendProcessedQueueLog(
+      createProcessedQueueLogItem({
+        category: 'learning',
+        title,
+        detail,
+        actionLabel,
+      }),
+    );
+  };
+
+  const handleToggleLessonCompleted = (lessonId: string, lessonTitle: string) => {
+    const wasCompleted = runtime.completedLessonIds.includes(lessonId);
+    onUpdateRuntime((current) => toggleLessonCompleted(current, lessonId));
+
+    if (!wasCompleted) {
+      logLearningAction(`完成《${course.title}》课时`, `已完成「${lessonTitle}」，课程进度继续向前推进。`, '完成课时');
+    }
+  };
+
+  const handleToggleMaterialViewed = (materialId: string, materialTitle: string) => {
+    const wasViewed = runtime.viewedMaterialIds.includes(materialId);
+    onUpdateRuntime((current) => toggleMaterialViewed(current, materialId));
+
+    if (!wasViewed) {
+      logLearningAction(`查看课程资料《${materialTitle}》`, `这份资料已记入《${course.title}》的学习轨迹。`, '标记资料已读');
+    }
+  };
 
   return (
     <div className="course-detail-layout">
@@ -114,6 +158,53 @@ export function CourseDetailView({
             <strong>最近学习：</strong>
             <span>{recentLesson}</span>
           </div>
+          <section className="detail-panel-card">
+            <div className="module-header">
+              <div>
+                <p className="eyebrow">Course Discussion</p>
+                <h3>课程讨论</h3>
+              </div>
+              <button type="button" className="secondary-btn compact-btn" onClick={onOpenCommunity}>
+                打开相关讨论
+              </button>
+              <button type="button" className="primary-btn compact-btn" onClick={() => onComposeCommunityPost(suggestedCommunityDraft)}>
+                发布课程感悟
+              </button>
+            </div>
+            <div className="detail-summary-row">
+              <article className="detail-summary-card">
+                <span className="detail-summary-label">讨论动态</span>
+                <strong>{communityPostCount}</strong>
+                <span>{communityPostCount > 0 ? '已回流到校友圈讨论流' : '这门课还没有关联讨论'}</span>
+              </article>
+              <article className="detail-summary-card">
+                <span className="detail-summary-label">最近讨论作者</span>
+                <strong>{latestCommunityPost?.author ?? '等待首条动态'}</strong>
+                <span>{latestCommunityPost?.time ?? '进入社区后可直接发布本课感悟'}</span>
+              </article>
+            </div>
+            {latestCommunityPost ? (
+              <article className="module-card post-card">
+                <div className="post-meta">
+                  <div>
+                    <p className="post-author">{latestCommunityPost.author}</p>
+                    <p className="post-role">{latestCommunityPost.role}</p>
+                  </div>
+                  <span className="course-updated">{latestCommunityPost.time}</span>
+                </div>
+                <span className="post-badge">{latestCommunityPost.badge}</span>
+                <p className="post-content">{latestCommunityPost.content}</p>
+                <div className="post-footer">
+                  <span>进入社区后会自动带上这门课的讨论上下文，方便继续跟进。</span>
+                </div>
+              </article>
+            ) : (
+              <div className="empty-state-card">
+                <strong>这门课还没有讨论记录</strong>
+                <span>可以从社区页直接发一条关联本课程的感悟或恢复进展。</span>
+              </div>
+            )}
+          </section>
         </section>
       )}
 
@@ -136,7 +227,7 @@ export function CourseDetailView({
                     <button type="button" className="secondary-btn compact-btn" onClick={() => onUpdateRuntime((current) => markCurrentLesson(current, lesson.id))}>
                       设为当前
                     </button>
-                    <button type="button" className="primary-btn compact-btn" onClick={() => onUpdateRuntime((current) => toggleLessonCompleted(current, lesson.id))}>
+                    <button type="button" className="primary-btn compact-btn" onClick={() => handleToggleLessonCompleted(lesson.id, lesson.title)}>
                       {runtime.completedLessonIds.includes(lesson.id) ? '撤销完成' : '标记完成'}
                     </button>
                   </div>
@@ -161,7 +252,7 @@ export function CourseDetailView({
                   <span className={material.status === 'ready' ? 'material-status ready' : 'material-status draft'}>
                     {material.status === 'ready' ? '可查看' : '草稿'}
                   </span>
-                  <button type="button" className="secondary-btn compact-btn" onClick={() => onUpdateRuntime((current) => toggleMaterialViewed(current, material.id))}>
+                  <button type="button" className="secondary-btn compact-btn" onClick={() => handleToggleMaterialViewed(material.id, material.title)}>
                     {runtime.viewedMaterialIds.includes(material.id) ? '撤销已读' : '标记已读'}
                   </button>
                 </div>

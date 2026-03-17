@@ -1,7 +1,7 @@
 #import "WebViewController.h"
 #import <WebKit/WebKit.h>
 
-@interface WebViewController () <WKNavigationDelegate>
+@interface WebViewController () <WKNavigationDelegate, WKUIDelegate>
 
 @property (nonatomic, strong) WKWebView *webView;
 @property (nonatomic, strong) UIProgressView *progressView;
@@ -170,6 +170,7 @@
   self.webView = [[WKWebView alloc] initWithFrame:CGRectZero configuration:configuration];
   self.webView.translatesAutoresizingMaskIntoConstraints = NO;
   self.webView.navigationDelegate = self;
+  self.webView.UIDelegate = self;
   self.webView.allowsBackForwardNavigationGestures = YES;
   self.webView.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
 
@@ -246,6 +247,17 @@
   }
 
   [UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];
+}
+
+- (nullable WKWebView *)webView:(WKWebView *)webView
+    createWebViewWithConfiguration:(WKWebViewConfiguration *)configuration
+               forNavigationAction:(WKNavigationAction *)navigationAction
+                    windowFeatures:(WKWindowFeatures *)windowFeatures {
+  if (!navigationAction.targetFrame.isMainFrame) {
+    [webView loadRequest:navigationAction.request];
+  }
+
+  return nil;
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath

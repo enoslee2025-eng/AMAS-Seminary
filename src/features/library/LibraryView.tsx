@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
 import { courses, libraryResources } from '../../data/mockData';
 import { usePersistentState } from '../../hooks/usePersistentState';
-import { LibraryCategory, LibraryRuntimeRecord, LibraryRuntimeState } from '../../types/app';
+import { CommunityPostPreview, LibraryCategory, LibraryResource, LibraryRuntimeRecord, LibraryRuntimeState } from '../../types/app';
+import { createProcessedQueueLogItem } from '../profile/profileState';
+import { useProcessedQueueLog } from '../profile/useProcessedQueueLog';
 import { getLibraryOverview, getLibraryRuntime, getRecentViewedResources } from './libraryState';
 
 const filters: Array<{ key: 'all' | LibraryCategory; label: string }> = [
@@ -16,17 +18,22 @@ export function LibraryView({
   runtimeRecord,
   onUpdateRuntime,
   onOpenCourse,
+  onOpenCommunityCourse,
+  communityPosts,
   selectedResourceId,
   onSelectResource,
 }: {
   runtimeRecord: LibraryRuntimeRecord;
   onUpdateRuntime: (resourceId: string, updater: (current: LibraryRuntimeState) => LibraryRuntimeState) => void;
   onOpenCourse: (courseId: string) => void;
+  onOpenCommunityCourse: (courseId: string, options?: { mode?: 'feed' | 'compose'; draft?: string }) => void;
+  communityPosts: CommunityPostPreview[];
   selectedResourceId: string | null;
   onSelectResource: (resourceId: string | null) => void;
 }) {
   const [activeFilter, setActiveFilter] = usePersistentState<'all' | LibraryCategory>('amas_library_filter', 'all');
   const [search, setSearch] = usePersistentState('amas_library_search', '');
+  const [, , appendProcessedQueueLog] = useProcessedQueueLog();
   const selectedResource = libraryResources.find((item) => item.id === selectedResourceId) ?? null;
   const visibleResources = libraryResources
     .filter((item) => (activeFilter === 'all' ? true : item.category === activeFilter))
@@ -52,7 +59,28 @@ export function LibraryView({
     onUpdateRuntime(resourceId, updater);
   };
 
-  const markViewedNow = (resourceId: string, extras?: Partial<LibraryRuntimeState>) =>
+  const logLearningAction = (title: string, detail: string, actionLabel: string) => {
+    appendProcessedQueueLog(
+      createProcessedQueueLogItem({
+        category: 'learning',
+        title,
+        detail,
+        actionLabel,
+      }),
+    );
+  };
+
+  const getResourceDetail = (resource: LibraryResource) => {
+    if (!resource.relatedCourseId) {
+      return `${resource.author} · ${resource.format}`;
+    }
+
+    const relatedCourse = courses.find((course) => course.id === resource.relatedCourseId);
+    return relatedCourse ? `已关联《${relatedCourse.title}》 · ${resource.format}` : `${resource.author} · ${resource.format}`;
+  };
+
+  const markViewedNow = (resourceId: string, extras?: Partial<LibraryRuntimeState>, actionLabel = '查看资源') => {
+    const resource = libraryResources.find((item) => item.id === resourceId) ?? null;
     updateRuntime(resourceId, (current) => ({
       ...current,
       viewed: true,
@@ -60,11 +88,21 @@ export function LibraryView({
       ...extras,
     }));
 
+    if (resource) {
+      logLearningAction(`查看资料《${resource.title}》`, getResourceDetail(resource), actionLabel);
+    }
+  };
+
   if (selectedResource) {
     const selectedRuntime = getLibraryRuntime(selectedResource.id, runtimeRecord);
     const relatedCourse = selectedResource.relatedCourseId
       ? courses.find((course) => course.id === selectedResource.relatedCourseId) ?? null
       : null;
+    const relatedCommunityPosts = selectedResource.relatedCourseId
+      ? communityPosts.filter((post) => post.courseId === selectedResource.relatedCourseId)
+      : [];
+    const latestCommunityPost = relatedCommunityPosts[0] ?? null;
+    const suggestedDiscussionDraft = `我刚查看了《${selectedResource.title}》，这份资料对《${relatedCourse?.title ?? '相关课程'}》的帮助是：`;
 
     return (
       <div className="library-layout">
@@ -114,6 +152,62 @@ export function LibraryView({
             <div className="library-action-row">
               <button type="button" className="primary-btn compact-btn" onClick={() => onOpenCourse(relatedCourse.id)}>
                 打开关联课程
+              </button>
+              <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCommunityCourse(relatedCourse.id)}>
+                打开相关讨论
+              </button>
+            </div>
+          </section>
+        )}
+
+        {relatedCourse && (
+          <section className="detail-panel-card">
+            <div className="module-header">
+              <div>
+                <p className="eyebrow">Resource Discussion</p>
+                <h2>资料相关讨论</h2>
+              </div>
+            </div>
+            <div className="detail-summary-row">
+              <article className="detail-summary-card">
+                <span className="detail-summary-label">讨论动态</span>
+                <strong>{relatedCommunityPosts.length}</strong>
+                <span>{relatedCommunityPosts.length > 0 ? '已进入课程讨论流' : '还没有关联这份资料的讨论'}</span>
+              </article>
+              <article className="detail-summary-card">
+                <span className="detail-summary-label">最近讨论</span>
+                <strong>{latestCommunityPost?.author ?? '等待首条动态'}</strong>
+                <span>{latestCommunityPost?.time ?? '可以从这里直接发起讨论'}</span>
+              </article>
+            </div>
+            {latestCommunityPost ? (
+              <article className="module-card post-card">
+                <div className="post-meta">
+                  <div>
+                    <p className="post-author">{latestCommunityPost.author}</p>
+                    <p className="post-role">{latestCommunityPost.role}</p>
+                  </div>
+                  <span className="course-updated">{latestCommunityPost.time}</span>
+                </div>
+                <span className="post-badge">{latestCommunityPost.badge}</span>
+                <p className="post-content">{latestCommunityPost.content}</p>
+              </article>
+            ) : (
+              <div className="empty-state-card">
+                <strong>这份资料还没有讨论记录</strong>
+                <span>可以直接带着资源上下文进入社区，发布一条新的课程感悟。</span>
+              </div>
+            )}
+            <div className="library-action-row">
+              <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCommunityCourse(relatedCourse.id)}>
+                查看课程讨论
+              </button>
+              <button
+                type="button"
+                className="primary-btn compact-btn"
+                onClick={() => onOpenCommunityCourse(relatedCourse.id, { mode: 'compose', draft: suggestedDiscussionDraft })}
+              >
+                基于资料发感悟
               </button>
             </div>
           </section>
@@ -178,23 +272,39 @@ export function LibraryView({
             <button
               type="button"
               className={selectedRuntime.favorite ? 'chip-btn active' : 'chip-btn'}
-              onClick={() => updateRuntime(selectedResource.id, (current) => ({ ...current, favorite: !current.favorite }))}
+              onClick={() => {
+                updateRuntime(selectedResource.id, (current) => ({ ...current, favorite: !current.favorite }));
+                if (!selectedRuntime.favorite) {
+                  logLearningAction(`收藏资料《${selectedResource.title}》`, getResourceDetail(selectedResource), '加入收藏');
+                }
+              }}
             >
               {selectedRuntime.favorite ? '取消收藏' : '加入收藏'}
             </button>
             <button type="button" className="secondary-btn compact-btn" onClick={() => markViewedNow(selectedResource.id)}>
-              标记已查看
+              {selectedRuntime.viewed ? '刷新查看时间' : '标记已查看'}
             </button>
             <button
               type="button"
               className="primary-btn compact-btn"
-              onClick={() => markViewedNow(selectedResource.id, { downloaded: true })}
+              onClick={() => {
+                markViewedNow(
+                  selectedResource.id,
+                  { downloaded: !selectedRuntime.downloaded },
+                  selectedRuntime.downloaded ? '刷新查看时间' : '下载资源',
+                );
+              }}
             >
-              下载资源
+              {selectedRuntime.downloaded ? '取消下载标记' : '下载资源'}
             </button>
             {selectedResource.relatedCourseId && (
               <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCourse(selectedResource.relatedCourseId!)}>
                 打开关联课程
+              </button>
+            )}
+            {selectedResource.relatedCourseId && (
+              <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCommunityCourse(selectedResource.relatedCourseId!)}>
+                打开讨论
               </button>
             )}
           </div>
@@ -271,65 +381,85 @@ export function LibraryView({
       )}
 
       <section className="panel-grid">
-        {visibleResources.map((resource) => (
-          <article className="module-card library-card" key={resource.id}>
-            <div className="post-meta">
-              <div>
-                <p className="post-author">{resource.title}</p>
-                <p className="post-role">{resource.author}</p>
+        {visibleResources.length > 0 ? (
+          visibleResources.map((resource) => (
+            <article className="module-card library-card" key={resource.id}>
+              <div className="post-meta">
+                <div>
+                  <p className="post-author">{resource.title}</p>
+                  <p className="post-role">{resource.author}</p>
+                </div>
+                <span className="course-updated">{resource.updatedAt}</span>
               </div>
-              <span className="course-updated">{resource.updatedAt}</span>
-            </div>
-            <div className="detail-chip-row">
-              <span className="post-badge">{resource.format}</span>
-              {resource.relatedCourseId && <span className="post-badge">关联课程</span>}
-              {runtimeRecord[resource.id]?.favorite && <span className="post-badge">已收藏</span>}
-              {runtimeRecord[resource.id]?.viewed && <span className="post-badge">已查看</span>}
-              {runtimeRecord[resource.id]?.downloaded && <span className="post-badge">已下载</span>}
-            </div>
-            <p>{resource.summary}</p>
-            <div className="library-action-row">
-              <button
-                type="button"
-                className={runtimeRecord[resource.id]?.favorite ? 'chip-btn active' : 'chip-btn'}
-                onClick={() => updateRuntime(resource.id, (current) => ({ ...current, favorite: !current.favorite }))}
-              >
-                {runtimeRecord[resource.id]?.favorite ? '取消收藏' : '加入收藏'}
-              </button>
-              <button
-                type="button"
-                className={runtimeRecord[resource.id]?.viewed ? 'chip-btn active' : 'chip-btn'}
-                onClick={() =>
-                  updateRuntime(resource.id, (current) => ({
-                    ...current,
-                    viewed: !current.viewed,
-                    lastViewedAt: current.viewed ? null : new Date().toISOString(),
-                  }))
-                }
-              >
-                {runtimeRecord[resource.id]?.viewed ? '取消已看' : '标记已看'}
-              </button>
-              <button
-                type="button"
-                className="secondary-btn compact-btn"
-                onClick={() => {
-                  markViewedNow(resource.id, { downloaded: true });
-                  onSelectResource(resource.id);
-                }}
-              >
-                查看资源
-              </button>
-            </div>
-            <div className="post-footer">
-              <span>{resource.relatedCourseId ? '这份资料已经可以跳回课程模块，后续继续补同步和阅读进度。' : '下一步会接入阅读进度、下载目录和课程资料同步。'}</span>
-              {resource.relatedCourseId && (
-                <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCourse(resource.relatedCourseId!)}>
-                  打开关联课程
+              <div className="detail-chip-row">
+                <span className="post-badge">{resource.format}</span>
+                {resource.relatedCourseId && <span className="post-badge">关联课程</span>}
+                {runtimeRecord[resource.id]?.favorite && <span className="post-badge">已收藏</span>}
+                {runtimeRecord[resource.id]?.viewed && <span className="post-badge">已查看</span>}
+                {runtimeRecord[resource.id]?.downloaded && <span className="post-badge">已下载</span>}
+              </div>
+              <p>{resource.summary}</p>
+              <div className="library-action-row">
+                <button
+                  type="button"
+                  className={runtimeRecord[resource.id]?.favorite ? 'chip-btn active' : 'chip-btn'}
+                  onClick={() => {
+                    updateRuntime(resource.id, (current) => ({ ...current, favorite: !current.favorite }));
+                    if (!runtimeRecord[resource.id]?.favorite) {
+                      logLearningAction(`收藏资料《${resource.title}》`, getResourceDetail(resource), '加入收藏');
+                    }
+                  }}
+                >
+                  {runtimeRecord[resource.id]?.favorite ? '取消收藏' : '加入收藏'}
                 </button>
-              )}
-            </div>
-          </article>
-        ))}
+                <button
+                  type="button"
+                  className={runtimeRecord[resource.id]?.viewed ? 'chip-btn active' : 'chip-btn'}
+                  onClick={() => {
+                    updateRuntime(resource.id, (current) => ({
+                      ...current,
+                      viewed: !current.viewed,
+                      lastViewedAt: current.viewed ? null : new Date().toISOString(),
+                    }));
+                    if (!runtimeRecord[resource.id]?.viewed) {
+                      logLearningAction(`查看资料《${resource.title}》`, getResourceDetail(resource), '标记已看');
+                    }
+                  }}
+                >
+                  {runtimeRecord[resource.id]?.viewed ? '取消已看' : '标记已看'}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-btn compact-btn"
+                  onClick={() => {
+                    markViewedNow(resource.id);
+                    onSelectResource(resource.id);
+                  }}
+                >
+                  查看资源
+                </button>
+              </div>
+              <div className="post-footer">
+                <span>{resource.relatedCourseId ? '这份资料已经可以跳回课程模块，后续继续补同步和阅读进度。' : '下一步会接入阅读进度、下载目录和课程资料同步。'}</span>
+                {resource.relatedCourseId && (
+                  <>
+                    <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCourse(resource.relatedCourseId!)}>
+                      打开关联课程
+                    </button>
+                    <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCommunityCourse(resource.relatedCourseId!)}>
+                      打开讨论
+                    </button>
+                  </>
+                )}
+              </div>
+            </article>
+          ))
+        ) : (
+          <div className="empty-state-card">
+            <strong>没有匹配的资源</strong>
+            <span>试试更换分类，或者搜索标题、作者与资源类型。</span>
+          </div>
+        )}
       </section>
     </div>
   );
