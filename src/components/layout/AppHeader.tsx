@@ -2,9 +2,9 @@ import { TabKey } from '../../types/app';
 
 const descriptions: Record<TabKey, { eyebrow: string; title: string; chip: string }> = {
   home: {
-    eyebrow: 'Recovery Workspace',
-    title: 'AMAS Seminary',
-    chip: 'Editable Source',
+    eyebrow: 'Source Rebuild',
+    title: '源码重建版',
+    chip: 'Current',
   },
   courses: {
     eyebrow: 'Courses Rebuild',

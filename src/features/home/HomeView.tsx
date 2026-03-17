@@ -72,6 +72,8 @@ export function HomeView({
   const sprintState = dailySprintState.dateKey === getLocalDateKey() ? dailySprintState : { dateKey: getLocalDateKey(), completedStepIds: [] };
   const sprintSummary = getProfileSprintSummary(sprintPlan, sprintState.completedStepIds);
   const nextSprintStep = sprintPlan.find((step) => !sprintState.completedStepIds.includes(step.id)) ?? null;
+  const entryCourseId =
+    actionCoach.recommendedCourse?.courseId ?? continueLearningCourses[0]?.id ?? displayCourses[0]?.id ?? null;
   const dailyWrapUp = buildDailyWrapUpReport({
     profileName,
     todayOverview,
@@ -153,22 +155,46 @@ export function HomeView({
 
   return (
     <>
-      <section className="hero-card">
-        <div>
+      <section className="hero-card home-hero-card">
+        <div className="home-hero-copy">
           <p className="eyebrow">AMAS Seminary</p>
-          <h2>源码恢复工作区已建立</h2>
+          <h2>你现在打开的是源码重建版</h2>
           <p className="hero-copy">
-            当前仓库已经从“只有运行包”恢复为“可继续开发”的源码工程。课程模块已经进入可交互状态，接下来会继续恢复校友圈、聊天和个人中心。
+            这里是我们正在继续开发的工作区，用来恢复课程、社区、图书馆和个人中心。如果你想看原来 App
+            的完整视觉，请进入恢复快照版。
           </p>
         </div>
-        <div className="hero-actions">
-          <a className="primary-btn" href="./recovered/index.html">
-            打开恢复快照
-          </a>
-          <a className="secondary-btn" href="https://github.com/new" target="_blank" rel="noreferrer">
-            创建远程仓库
-          </a>
+        <div className="home-mode-grid">
+          <article className="mode-entry-card current">
+            <span className="mode-entry-tag">当前所在</span>
+            <strong>源码重建版</strong>
+            <p>可编辑、可提交、可继续开发，适合推进功能和修复交互。</p>
+            <div className="hero-actions">
+              <button type="button" className="primary-btn compact-btn" onClick={onOpenProfile}>
+                查看今日冲刺
+              </button>
+              {entryCourseId && (
+                <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCourse(entryCourseId)}>
+                  打开当前课程
+                </button>
+              )}
+            </div>
+          </article>
+          <article className="mode-entry-card">
+            <span className="mode-entry-tag">原始界面</span>
+            <strong>恢复快照版</strong>
+            <p>直接打开从 iOS 安装包里救回来的旧界面，用来核对视觉、层级和原始流程。</p>
+            <div className="hero-actions">
+              <a className="primary-btn compact-btn" href="./recovered/index.html">
+                进入恢复快照
+              </a>
+              <a className="secondary-btn compact-btn" href="https://github.com/enoslee2025-eng/AMAS-Seminary" target="_blank" rel="noreferrer">
+                查看 GitHub
+              </a>
+            </div>
+          </article>
         </div>
+        <p className="mode-entry-note">恢复快照用于对照原始 App，源码重建版才是当前继续开发的主线。</p>
       </section>
 
       <section className="summary-grid">

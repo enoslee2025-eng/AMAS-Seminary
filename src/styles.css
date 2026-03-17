@@ -184,6 +184,68 @@ button:disabled {
   gap: 10px;
 }
 
+.home-hero-card {
+  background:
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.18), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(239, 246, 255, 0.94) 100%);
+}
+
+.home-hero-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.home-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.mode-entry-card {
+  border-radius: 22px;
+  border: 1px solid rgba(203, 213, 225, 0.82);
+  background: rgba(255, 255, 255, 0.96);
+  padding: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.mode-entry-card.current {
+  border-color: rgba(29, 78, 216, 0.2);
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%);
+  box-shadow: 0 18px 44px rgba(29, 78, 216, 0.08);
+}
+
+.mode-entry-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: rgba(29, 78, 216, 0.1);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  width: fit-content;
+}
+
+.mode-entry-card strong {
+  color: #14213d;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.mode-entry-card p,
+.mode-entry-note {
+  margin: 0;
+  color: #54657d;
+  line-height: 1.65;
+}
+
+.mode-entry-note {
+  font-size: 13px;
+}
+
 .primary-btn,
 .secondary-btn,
 .chip-btn,
@@ -218,6 +280,7 @@ button:disabled {
 }
 
 .panel-grid,
+.summary-grid,
 .milestone-grid,
 .course-list,
 .continue-learning-grid,
@@ -235,6 +298,10 @@ button:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .milestone-card,
 .module-card,
 .continue-learning-card,
@@ -242,6 +309,30 @@ button:disabled {
 .lesson-card,
 .material-card {
   padding: 18px;
+}
+
+.summary-card {
+  border-radius: 22px;
+  border: 1px solid rgba(203, 213, 225, 0.82);
+  background: rgba(255, 255, 255, 0.96);
+  padding: 16px 18px;
+  display: grid;
+  gap: 8px;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.05);
+}
+
+.summary-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.summary-card strong {
+  color: #14213d;
+  font-size: 30px;
+  line-height: 1;
 }
 
 .milestone-title {
@@ -1421,12 +1512,17 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .home-mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-grid,
   .continue-learning-grid,
   .detail-summary-row,
   .community-summary-grid,
   .profile-highlight-grid,
   .chat-header-stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .rhythm-bar-grid {
@@ -1472,5 +1568,56 @@ button:disabled {
 
   .chat-bubble {
     max-width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-shell {
+    gap: 14px;
+    padding: max(calc(env(safe-area-inset-top, 0px) + 14px), 20px) 12px calc(env(safe-area-inset-bottom, 0px) + 18px);
+  }
+
+  .hero-card,
+  .content-card,
+  .continue-learning-card,
+  .course-hero-card,
+  .detail-hero-card,
+  .toolbar-card,
+  .detail-toolbar-card,
+  .detail-panel-card {
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .app-header h1,
+  .hero-card h2,
+  .course-hero-card h2,
+  .detail-hero-card h2,
+  .content-card h2,
+  .module-card h2,
+  .course-card h3 {
+    font-size: 18px;
+    line-height: 1.25;
+  }
+
+  .post-author {
+    font-size: 18px;
+  }
+
+  .summary-grid,
+  .continue-learning-grid,
+  .detail-summary-row,
+  .community-summary-grid,
+  .profile-highlight-grid,
+  .chat-header-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-card strong {
+    font-size: 24px;
+  }
+
+  .mode-entry-card strong {
+    font-size: 20px;
   }
 }
