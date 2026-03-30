@@ -2,6 +2,7 @@ import { libraryResources, courses } from '../../data/mockData';
 import { CommunityNotification, CommunityPostPreview, ConversationPreview, LibraryRuntimeRecord } from '../../types/app';
 import { DisplayCourse } from '../courses/courseState';
 import { getDisplayTimeSortValue } from '../community/communityState';
+import { getLibraryProgressLabel } from '../library/libraryState';
 
 export type LearningActivityItem = {
   id: string;
@@ -36,12 +37,14 @@ export type ProfileDiscussionTaskItem = {
 
 export type ProfileTodayTaskItem = {
   id: string;
-  kind: 'course' | 'conversation' | 'notification';
+  kind: 'course' | 'resource' | 'conversation' | 'notification';
   title: string;
   detail: string;
   meta: string;
   sortValue: number;
+  entryTarget?: 'course' | 'resource';
   courseId?: string;
+  resourceId?: string;
   conversationId?: string;
   notificationId?: string;
 };
@@ -49,6 +52,7 @@ export type ProfileTodayTaskItem = {
 export type ProfileTodayTaskOverview = {
   total: number;
   pendingLessons: number;
+  pendingResources: number;
   unreadMessages: number;
   unreadNotifications: number;
 };
@@ -103,11 +107,15 @@ export type WeeklyGoalSummary = {
   nextStepDetail: string;
 };
 
-export type RecommendedCourseAction = {
-  courseId: string;
+export type RecommendedStudyAction = {
+  kind: 'course' | 'resource';
+  entryTarget: 'course' | 'resource';
   title: string;
   detail: string;
   ctaLabel: string;
+  courseId?: string;
+  resourceId?: string;
+  resourceTitle?: string;
 };
 
 export type RecommendedReminderAction = {
@@ -120,7 +128,7 @@ export type RecommendedReminderAction = {
 };
 
 export type ProfileActionCoachSummary = {
-  recommendedCourse: RecommendedCourseAction | null;
+  recommendedStudy: RecommendedStudyAction | null;
   recommendedReminder: RecommendedReminderAction | null;
   dailySummary: string;
 };
@@ -136,7 +144,9 @@ export type ProfileSprintStep = {
   title: string;
   detail: string;
   ctaLabel: string;
+  entryTarget?: 'course' | 'resource';
   courseId?: string;
+  resourceId?: string;
   conversationId?: string;
   notificationId?: string;
 };
@@ -205,6 +215,12 @@ function getSortTime(value: string | null | undefined) {
   return value ? new Date(value).getTime() : 0;
 }
 
+function buildTodayOverviewBreakdown(todayOverview: ProfileTodayTaskOverview) {
+  return `其中包含 ${todayOverview.pendingLessons} 个课时、${todayOverview.pendingResources} 份资料进度和 ${
+    todayOverview.unreadMessages + todayOverview.unreadNotifications
+  } 条提醒。`;
+}
+
 function isLearningActionCategory(category: ProcessedQueueLogItem['category']) {
   return category === 'learning' || category === 'course';
 }
@@ -221,28 +237,32 @@ export function buildLearningActivities({
   profileName: string;
 }): LearningActivityItem[] {
   const courseActivities = displayCourses
-    .filter((course) => course.runtime.lastStudiedAt)
+    .filter((course) => course.lastActivityAt)
     .map((course) => ({
       id: `course-${course.id}`,
       kind: 'course' as const,
       title: `学习课程《${course.title}》`,
-      detail: `最近停在 ${course.recentLessonLabel}，当前进度 ${course.progressValue}%`,
+      detail: course.lastActivityDetail,
       timeLabel: course.lastStudiedLabel,
-      sortValue: new Date(course.runtime.lastStudiedAt as string).getTime(),
+      sortValue: new Date(course.lastActivityAt as string).getTime(),
       courseId: course.id,
+      ...(course.lastActivityResourceId ? { resourceId: course.lastActivityResourceId } : {}),
     }));
 
   const resourceActivities = libraryResources
     .filter((resource) => libraryRuntimeRecord[resource.id]?.lastViewedAt)
     .map((resource) => {
-      const viewedAt = libraryRuntimeRecord[resource.id]?.lastViewedAt as string;
+      const runtime = libraryRuntimeRecord[resource.id];
+      const viewedAt = runtime?.lastViewedAt as string;
+      const progressPercent = runtime?.progressPercent ?? 0;
       const relatedCourse = resource.relatedCourseId ? courses.find((course) => course.id === resource.relatedCourseId) ?? null : null;
+      const baseDetail = relatedCourse ? `关联课程《${relatedCourse.title}》 · ${resource.format}` : `${resource.author} · ${resource.format}`;
 
       return {
         id: `resource-${resource.id}`,
         kind: 'resource' as const,
         title: `查看资料《${resource.title}》`,
-        detail: relatedCourse ? `关联课程《${relatedCourse.title}》 · ${resource.format}` : `${resource.author} · ${resource.format}`,
+        detail: progressPercent > 0 ? `${getLibraryProgressLabel(progressPercent)} ${progressPercent}% · ${baseDetail}` : baseDetail,
         timeLabel: formatAbsoluteTime(viewedAt),
         sortValue: new Date(viewedAt).getTime(),
         courseId: resource.relatedCourseId,
@@ -293,13 +313,19 @@ export function buildProfileResourceFocus(runtimeRecord: LibraryRuntimeRecord, l
     .map((resource) => {
       const runtime = runtimeRecord[resource.id];
       const viewedAt = runtime?.lastViewedAt ? new Date(runtime.lastViewedAt).getTime() : 0;
+      const progressPercent = runtime?.progressPercent ?? 0;
       const relatedCourse = resource.relatedCourseId ? courses.find((course) => course.id === resource.relatedCourseId) ?? null : null;
       const detail = relatedCourse ? `关联课程《${relatedCourse.title}》 · ${resource.format}` : `${resource.author} · ${resource.format}`;
+      const progressLabel = progressPercent > 0 ? `${getLibraryProgressLabel(progressPercent)} ${progressPercent}%` : null;
       const meta = runtime?.favorite
         ? viewedAt
-          ? `已收藏 · 最近查看 ${formatAbsoluteTime(runtime.lastViewedAt as string)}`
-          : '已收藏到个人资料夹'
-        : `最近查看 ${formatAbsoluteTime(runtime?.lastViewedAt as string)}`;
+          ? `${progressLabel ? `${progressLabel} · ` : ''}已收藏 · 最近查看 ${formatAbsoluteTime(runtime.lastViewedAt as string)}`
+          : progressLabel
+            ? `${progressLabel} · 已收藏到个人资料夹`
+            : '已收藏到个人资料夹'
+        : progressLabel
+          ? `${progressLabel} · 最近查看 ${formatAbsoluteTime(runtime?.lastViewedAt as string)}`
+          : `最近查看 ${formatAbsoluteTime(runtime?.lastViewedAt as string)}`;
 
       return {
         id: resource.id,
@@ -380,17 +406,7 @@ export function buildPendingDiscussionTasks({
     .slice(0, limit);
 }
 
-export function buildProfileTodayTasks({
-  displayCourses,
-  conversations,
-  notifications,
-  limit = 6,
-}: {
-  displayCourses: DisplayCourse[];
-  conversations: ConversationPreview[];
-  notifications: CommunityNotification[];
-  limit?: number;
-}): ProfileTodayTaskItem[] {
+function getPendingCourseTasks(displayCourses: DisplayCourse[]) {
   const courseTasks = displayCourses
     .filter((course) => course.progressValue > 0 && course.progressValue < 100)
     .map((course) => {
@@ -399,18 +415,89 @@ export function buildProfileTodayTasks({
         return null;
       }
 
-      const sortValue = course.runtime.lastStudiedAt ? new Date(course.runtime.lastStudiedAt).getTime() : 0;
+      const sortValue = course.lastActivityAt ? new Date(course.lastActivityAt).getTime() : 0;
+      const shouldOpenPrimaryResource = Boolean(
+        course.primaryLinkedResource &&
+          (
+            course.lastActivitySource === 'resource' ||
+            course.primaryLinkedResource.progressPercent > 0 ||
+            course.primaryLinkedResource.downloaded
+          ),
+      );
       return {
         id: `today-course-${course.id}`,
         kind: 'course' as const,
         title: `继续《${course.title}》`,
-        detail: `还有 ${remainingLessons} 个课时待完成，当前停在 ${course.recentLessonLabel}`,
-        meta: course.runtime.lastStudiedAt ? `课程待办 · 最近学习 ${course.lastStudiedLabel}` : '课程待办 · 等待继续推进',
+        detail:
+          shouldOpenPrimaryResource && course.primaryLinkedResource
+            ? `还有 ${remainingLessons} 个课时待完成，建议先通过资料《${course.primaryLinkedResource.resourceTitle}》继续。`
+            : `还有 ${remainingLessons} 个课时待完成，当前停在 ${course.recentLessonLabel}`,
+        meta:
+          course.lastActivitySource === 'resource' && course.lastActivityResourceTitle
+            ? `课程资料待办 · 最近通过《${course.lastActivityResourceTitle}》继续 ${course.lastStudiedLabel}`
+            : course.lastActivityAt
+              ? `课程待办 · 最近学习 ${course.lastStudiedLabel}`
+              : '课程待办 · 等待继续推进',
         sortValue: 10 ** 14 + sortValue,
+        entryTarget: shouldOpenPrimaryResource ? ('resource' as const) : ('course' as const),
         courseId: course.id,
+        ...(shouldOpenPrimaryResource && course.primaryLinkedResource ? { resourceId: course.primaryLinkedResource.resourceId } : {}),
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  return {
+    courseTasks,
+    surfacedResourceIds: new Set(
+      courseTasks
+        .filter((task) => task.entryTarget === 'resource' && task.resourceId)
+        .map((task) => task.resourceId as string),
+    ),
+  };
+}
+
+export function buildProfileTodayTasks({
+  displayCourses,
+  libraryRuntimeRecord,
+  conversations,
+  notifications,
+  limit = 6,
+}: {
+  displayCourses: DisplayCourse[];
+  libraryRuntimeRecord: LibraryRuntimeRecord;
+  conversations: ConversationPreview[];
+  notifications: CommunityNotification[];
+  limit?: number;
+}): ProfileTodayTaskItem[] {
+  const { courseTasks, surfacedResourceIds } = getPendingCourseTasks(displayCourses);
+
+  const resourceTasks = libraryResources
+    .filter((resource) => {
+      if (surfacedResourceIds.has(resource.id)) {
+        return false;
+      }
+
+      const progressPercent = libraryRuntimeRecord[resource.id]?.progressPercent ?? 0;
+      return progressPercent > 0 && progressPercent < 100;
+    })
+    .map((resource) => {
+      const runtime = libraryRuntimeRecord[resource.id];
+      const progressPercent = runtime?.progressPercent ?? 0;
+      const relatedCourse = resource.relatedCourseId ? courses.find((course) => course.id === resource.relatedCourseId) ?? null : null;
+      const lastViewedLabel = runtime?.lastViewedAt ? formatAbsoluteTime(runtime.lastViewedAt) : '等待继续阅读';
+
+      return {
+        id: `today-resource-${resource.id}`,
+        kind: 'resource' as const,
+        title: `继续《${resource.title}》`,
+        detail: relatedCourse
+          ? `${getLibraryProgressLabel(progressPercent)} ${progressPercent}% · 已关联《${relatedCourse.title}》`
+          : `${getLibraryProgressLabel(progressPercent)} ${progressPercent}% · ${resource.author}`,
+        meta: `资料待办 · 最近阅读 ${lastViewedLabel}${runtime?.downloaded ? ' · 已离线' : ''}`,
+        sortValue: 15 * 10 ** 13 + getSortTime(runtime?.lastViewedAt) + progressPercent,
+        resourceId: resource.id,
+      };
+    });
 
   const conversationTasks = [...conversations]
     .filter((conversation) => conversation.unread > 0)
@@ -444,21 +531,29 @@ export function buildProfileTodayTasks({
       notificationId: notification.id,
     }));
 
-  return [...conversationTasks, ...notificationTasks, ...courseTasks]
+  return [...conversationTasks, ...notificationTasks, ...resourceTasks, ...courseTasks]
     .sort((left, right) => right.sortValue - left.sortValue)
     .slice(0, limit);
 }
 
 export function getProfileTodayTaskOverview(
   displayCourses: DisplayCourse[],
+  libraryRuntimeRecord: LibraryRuntimeRecord,
   conversations: ConversationPreview[],
   notifications: CommunityNotification[],
 ): ProfileTodayTaskOverview {
+  const { courseTasks, surfacedResourceIds } = getPendingCourseTasks(displayCourses);
+  const pendingStandaloneResources = libraryResources.reduce((sum, resource) => {
+    if (surfacedResourceIds.has(resource.id)) {
+      return sum;
+    }
+
+    const progressPercent = libraryRuntimeRecord[resource.id]?.progressPercent ?? 0;
+    return progressPercent > 0 && progressPercent < 100 ? sum + 1 : sum;
+  }, 0);
+
   return {
-    total:
-      displayCourses.filter((course) => course.progressValue > 0 && course.progressValue < 100 && course.syllabus.length - course.completedLessonsCount > 0).length +
-      conversations.filter((conversation) => conversation.unread > 0).length +
-      notifications.filter((notification) => !notification.read).length,
+    total: courseTasks.length + pendingStandaloneResources + conversations.filter((conversation) => conversation.unread > 0).length + notifications.filter((notification) => !notification.read).length,
     pendingLessons: displayCourses.reduce((sum, course) => {
       if (course.progressValue <= 0 || course.progressValue >= 100) {
         return sum;
@@ -466,6 +561,7 @@ export function getProfileTodayTaskOverview(
 
       return sum + Math.max(course.syllabus.length - course.completedLessonsCount, 0);
     }, 0),
+    pendingResources: pendingStandaloneResources,
     unreadMessages: conversations.reduce((sum, conversation) => sum + conversation.unread, 0),
     unreadNotifications: notifications.filter((notification) => !notification.read).length,
   };
@@ -609,8 +705,11 @@ export function getWeeklyGoalSummary({
         ? `今天的待办已经清空，本周目标还差 ${remainingWeeklyActions} 项。`
         : '今天和本周的核心目标都已完成，可以进入资料阅读或课程讨论复盘。';
   } else if (todayOverview.pendingLessons > 0) {
-    nextStepLabel = '优先完成课时';
-    nextStepDetail = `离清空今日待办还差 ${todayOverview.total} 项，其中还有 ${todayOverview.pendingLessons} 个课时待完成。`;
+    nextStepLabel = '优先完成学习进度';
+    nextStepDetail = `离清空今日待办还差 ${todayOverview.total} 项，当前最明显的是 ${todayOverview.pendingLessons} 个课时和 ${todayOverview.pendingResources} 份资料进度待推进。`;
+  } else if (todayOverview.pendingResources > 0) {
+    nextStepLabel = '优先继续资料阅读';
+    nextStepDetail = `离清空今日待办还差 ${todayOverview.total} 项，当前有 ${todayOverview.pendingResources} 份资料阅读进度待继续。`;
   } else if (unreadLoad > 0) {
     nextStepLabel = '优先清理提醒';
     nextStepDetail = `离清空今日待办还差 ${todayOverview.total} 项，当前主要是 ${unreadLoad} 条消息和通知提醒。`;
@@ -631,12 +730,14 @@ export function getWeeklyGoalSummary({
 
 export function getProfileActionCoachSummary({
   displayCourses,
+  libraryRuntimeRecord,
   conversations,
   notifications,
   todayOverview,
   processedSummary,
 }: {
   displayCourses: DisplayCourse[];
+  libraryRuntimeRecord: LibraryRuntimeRecord;
   conversations: ConversationPreview[];
   notifications: CommunityNotification[];
   todayOverview: ProfileTodayTaskOverview;
@@ -655,17 +756,83 @@ export function getProfileActionCoachSummary({
           return remainingDiff;
         }
 
-        return getSortTime(right.runtime.lastStudiedAt) - getSortTime(left.runtime.lastStudiedAt);
+        return getSortTime(right.lastActivityAt) - getSortTime(left.lastActivityAt);
       })[0] ?? null;
 
-  const recommendedCourse = recommendedCourseSource
-    ? {
-        courseId: recommendedCourseSource.id,
-        title: recommendedCourseSource.title,
-        detail: `已完成 ${recommendedCourseSource.completedLessonsCount}/${recommendedCourseSource.syllabus.length} 课时，还差 ${getRemainingLessons(recommendedCourseSource)} 课时，最近停在 ${recommendedCourseSource.recentLessonLabel}。`,
-        ctaLabel: '打开推荐课程',
-      }
-    : null;
+  const recommendedResourceSource =
+    [...libraryResources]
+      .filter((resource) => {
+        const progressPercent = libraryRuntimeRecord[resource.id]?.progressPercent ?? 0;
+        return progressPercent > 0 && progressPercent < 100;
+      })
+      .sort((left, right) => {
+        const leftRuntime = libraryRuntimeRecord[left.id];
+        const rightRuntime = libraryRuntimeRecord[right.id];
+        const leftProgress = leftRuntime?.progressPercent ?? 0;
+        const rightProgress = rightRuntime?.progressPercent ?? 0;
+
+        if (rightProgress !== leftProgress) {
+          return rightProgress - leftProgress;
+        }
+
+        if (Number(Boolean(rightRuntime?.downloaded)) !== Number(Boolean(leftRuntime?.downloaded))) {
+          return Number(Boolean(rightRuntime?.downloaded)) - Number(Boolean(leftRuntime?.downloaded));
+        }
+
+        return getSortTime(rightRuntime?.lastViewedAt) - getSortTime(leftRuntime?.lastViewedAt);
+      })[0] ?? null;
+
+  const recommendedStudy = recommendedCourseSource
+    ? (() => {
+        const shouldOpenPrimaryResource = Boolean(
+          recommendedCourseSource.primaryLinkedResource &&
+            (
+              recommendedCourseSource.lastActivitySource === 'resource' ||
+              recommendedCourseSource.primaryLinkedResource.progressPercent > 0 ||
+              recommendedCourseSource.primaryLinkedResource.downloaded
+            ),
+        );
+
+        return {
+          kind: 'course' as const,
+          entryTarget: shouldOpenPrimaryResource ? ('resource' as const) : ('course' as const),
+          courseId: recommendedCourseSource.id,
+          title: recommendedCourseSource.title,
+          detail: shouldOpenPrimaryResource && recommendedCourseSource.primaryLinkedResource
+            ? `已完成 ${recommendedCourseSource.completedLessonsCount}/${recommendedCourseSource.syllabus.length} 课时，还差 ${getRemainingLessons(recommendedCourseSource)} 课时，建议先通过资料《${recommendedCourseSource.primaryLinkedResource.resourceTitle}》继续。`
+            : `已完成 ${recommendedCourseSource.completedLessonsCount}/${recommendedCourseSource.syllabus.length} 课时，还差 ${getRemainingLessons(recommendedCourseSource)} 课时，最近停在 ${recommendedCourseSource.recentLessonLabel}。`,
+          ctaLabel: shouldOpenPrimaryResource ? '继续课程资料' : '打开推荐课程',
+          ...(recommendedCourseSource.primaryLinkedResource
+            ? {
+                resourceId: recommendedCourseSource.primaryLinkedResource.resourceId,
+                resourceTitle: recommendedCourseSource.primaryLinkedResource.resourceTitle,
+              }
+            : {}),
+        };
+      })()
+    : recommendedResourceSource
+      ? (() => {
+          const runtime = libraryRuntimeRecord[recommendedResourceSource.id];
+          const progressPercent = runtime?.progressPercent ?? 0;
+          const relatedCourse = recommendedResourceSource.relatedCourseId
+            ? courses.find((course) => course.id === recommendedResourceSource.relatedCourseId) ?? null
+            : null;
+
+          return {
+            kind: 'resource' as const,
+            entryTarget: 'resource' as const,
+            resourceId: recommendedResourceSource.id,
+            resourceTitle: recommendedResourceSource.title,
+            title: recommendedResourceSource.title,
+            detail: `${
+              runtime?.downloaded ? '已加入离线资料夹 · ' : ''
+            }${getLibraryProgressLabel(progressPercent)} ${progressPercent}% · ${
+              relatedCourse ? `关联《${relatedCourse.title}》` : `${recommendedResourceSource.author} · ${recommendedResourceSource.format}`
+            }`,
+            ctaLabel: '打开推荐资料',
+          };
+        })()
+      : null;
 
   const topConversation =
     [...conversations]
@@ -715,13 +882,13 @@ export function getProfileActionCoachSummary({
   if (processedSummary.totalActions > 0) {
     dailySummary = `今天已经处理 ${processedSummary.totalActions} 次动作，完成了 ${processedSummary.learningActions} 个学习动作，并清理了 ${processedSummary.reminderActions} 项提醒；当前还剩 ${todayOverview.total} 项待办。`;
   } else if (todayOverview.total > 0) {
-    dailySummary = `今天还有 ${todayOverview.total} 项待办，其中包含 ${todayOverview.pendingLessons} 个课时和 ${todayOverview.unreadMessages + todayOverview.unreadNotifications} 条提醒。`;
-  } else if (recommendedCourse) {
-    dailySummary = `今天的待办已经清空，可以继续冲刺《${recommendedCourse.title}》，把这周的学习节奏保持住。`;
+    dailySummary = `今天还有 ${todayOverview.total} 项待办，${buildTodayOverviewBreakdown(todayOverview)}`;
+  } else if (recommendedStudy) {
+    dailySummary = `今天的待办已经清空，可以继续推进《${recommendedStudy.title}》，把这周的学习节奏保持住。`;
   }
 
   return {
-    recommendedCourse,
+    recommendedStudy,
     recommendedReminder,
     dailySummary,
   };
@@ -750,7 +917,7 @@ export function buildDailyWrapUpReport({
       ? `今天完成了 ${processedSummary.learningActions} 个学习动作，并清理了 ${processedSummary.reminderActions} 项提醒。`
       : `今天还没有处理记录，当前待办里还有 ${todayOverview.total} 项。`,
     todayOverview.total > 0
-      ? `当前还剩 ${todayOverview.total} 项待办，其中包含 ${todayOverview.pendingLessons} 个课时和 ${todayOverview.unreadMessages + todayOverview.unreadNotifications} 条提醒。`
+      ? `当前还剩 ${todayOverview.total} 项待办，${buildTodayOverviewBreakdown(todayOverview)}`
       : '今日待办已经清空，可以把注意力转到复盘或下一步计划。',
     `本周目标已完成 ${weeklyGoalSummary.weeklyCompletedActions}/${weeklyGoalSummary.weeklyTargetActions}，完成率 ${weeklyGoalSummary.weeklyCompletionRate}%。`,
     `下一步建议：${weeklyGoalSummary.nextStepDetail}`,
@@ -765,26 +932,37 @@ export function buildDailyWrapUpReport({
 }
 
 export function buildProfileSprintPlan({
-  recommendedCourse,
+  recommendedStudy,
   recommendedReminder,
   nextTodayTask,
 }: {
-  recommendedCourse: RecommendedCourseAction | null;
+  recommendedStudy: RecommendedStudyAction | null;
   recommendedReminder: RecommendedReminderAction | null;
   nextTodayTask: ProfileTodayTaskItem | null;
 }): ProfileSprintStep[] {
   const steps: ProfileSprintStep[] = [];
   const seenTargets = new Set<string>();
 
-  if (recommendedCourse) {
-    const targetKey = `course:${recommendedCourse.courseId}`;
+  if (recommendedStudy) {
+    const targetKey = recommendedStudy.courseId
+      ? `course:${recommendedStudy.courseId}`
+      : recommendedStudy.resourceId
+        ? `resource:${recommendedStudy.resourceId}`
+        : `study:${recommendedStudy.title}`;
     seenTargets.add(targetKey);
     steps.push({
       id: `sprint-${targetKey}`,
-      title: `先推进《${recommendedCourse.title}》`,
-      detail: recommendedCourse.detail,
-      ctaLabel: recommendedCourse.ctaLabel,
-      courseId: recommendedCourse.courseId,
+      title:
+        recommendedStudy.kind === 'course'
+          ? recommendedStudy.entryTarget === 'resource' && recommendedStudy.resourceTitle
+            ? `先通过资料继续《${recommendedStudy.title}》`
+            : `先推进《${recommendedStudy.title}》`
+          : `先继续《${recommendedStudy.title}》`,
+      detail: recommendedStudy.detail,
+      ctaLabel: recommendedStudy.ctaLabel,
+      entryTarget: recommendedStudy.entryTarget,
+      ...(recommendedStudy.courseId ? { courseId: recommendedStudy.courseId } : {}),
+      ...(recommendedStudy.resourceId ? { resourceId: recommendedStudy.resourceId } : {}),
     });
   }
 
@@ -811,6 +989,8 @@ export function buildProfileSprintPlan({
   if (nextTodayTask) {
     const targetKey = nextTodayTask.courseId
       ? `course:${nextTodayTask.courseId}`
+      : nextTodayTask.resourceId
+        ? `resource:${nextTodayTask.resourceId}`
       : nextTodayTask.conversationId
         ? `conversation:${nextTodayTask.conversationId}`
         : nextTodayTask.notificationId
@@ -820,10 +1000,12 @@ export function buildProfileSprintPlan({
     if (!seenTargets.has(targetKey)) {
       steps.push({
         id: `sprint-${targetKey}`,
-        title: '最后收掉当前待办',
+        title: nextTodayTask.entryTarget === 'resource' && nextTodayTask.resourceId ? '最后通过资料收掉当前待办' : '最后收掉当前待办',
         detail: nextTodayTask.detail,
         ctaLabel: '打开当前待办',
+        ...(nextTodayTask.entryTarget ? { entryTarget: nextTodayTask.entryTarget } : {}),
         ...(nextTodayTask.courseId ? { courseId: nextTodayTask.courseId } : {}),
+        ...(nextTodayTask.resourceId ? { resourceId: nextTodayTask.resourceId } : {}),
         ...(nextTodayTask.conversationId ? { conversationId: nextTodayTask.conversationId } : {}),
         ...(nextTodayTask.notificationId ? { notificationId: nextTodayTask.notificationId } : {}),
       });

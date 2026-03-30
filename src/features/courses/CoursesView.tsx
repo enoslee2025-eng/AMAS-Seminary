@@ -1,29 +1,58 @@
 import { useMemo } from 'react';
 import { courseCategories, courses } from '../../data/mockData';
-import { CommunityPostPreview, CourseCategory, CourseRuntimeRecord, CourseRuntimeState } from '../../types/app';
-import { usePersistentState } from '../../hooks/usePersistentState';
+import {
+  CommunityPostPreview,
+  CourseCategory,
+  CourseRuntimeRecord,
+  CourseRuntimeState,
+  LibraryRuntimeRecord,
+  LibraryRuntimeState,
+  RuntimeSyncState,
+} from '../../types/app';
+import { useScopedPersistentState } from '../../hooks/usePersistentState';
 import { CourseDetailView } from './CourseDetailView';
-import { buildDisplayCourses, DisplayCourse, getContinueLearningCourses } from './courseState';
+import { buildDisplayCourses, DisplayCourse, getContinueLearningCourses, getLearningOverview } from './courseState';
 
 export function CoursesView({
+  storageScopeKey,
   runtimeRecord,
+  libraryRuntimeRecord,
   onUpdateRuntime,
+  onUpdateLibraryRuntime,
+  runtimeSyncState,
   selectedCourseId,
   onSelectCourse,
   communityPosts,
+  onOpenResource,
   onOpenCommunityCourse,
 }: {
+  storageScopeKey: string;
   runtimeRecord: CourseRuntimeRecord;
+  libraryRuntimeRecord: LibraryRuntimeRecord;
   onUpdateRuntime: (courseId: string, updater: (current: CourseRuntimeState) => CourseRuntimeState) => void;
+  onUpdateLibraryRuntime: (
+    resourceId: string,
+    updater: (current: LibraryRuntimeState) => LibraryRuntimeState,
+    source?: 'view' | 'favorite' | 'download' | 'restore',
+  ) => void;
+  runtimeSyncState: RuntimeSyncState | null;
   selectedCourseId: string | null;
   onSelectCourse: (courseId: string | null) => void;
   communityPosts: CommunityPostPreview[];
+  onOpenResource: (resourceId: string) => void;
   onOpenCommunityCourse: (courseId: string, options?: { mode?: 'feed' | 'compose'; draft?: string }) => void;
 }) {
-  const [activeCategory, setActiveCategory] = usePersistentState<CourseCategory>('amas_courses_category', 'all');
-  const [search, setSearch] = usePersistentState('amas_courses_search', '');
+  const [activeCategory, setActiveCategory] = useScopedPersistentState<CourseCategory>(
+    'amas_courses_category',
+    storageScopeKey,
+    'all',
+  );
+  const [search, setSearch] = useScopedPersistentState('amas_courses_search', storageScopeKey, '');
 
-  const displayCourses = useMemo<DisplayCourse[]>(() => buildDisplayCourses(courses, runtimeRecord), [runtimeRecord]);
+  const displayCourses = useMemo<DisplayCourse[]>(
+    () => buildDisplayCourses(courses, runtimeRecord, libraryRuntimeRecord),
+    [libraryRuntimeRecord, runtimeRecord],
+  );
 
   const filteredCourses = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -59,6 +88,23 @@ export function CoursesView({
 
   const highlightedCourse = filteredCourses[0] ?? null;
   const continueLearningCourses = useMemo(() => getContinueLearningCourses(displayCourses, 2), [displayCourses]);
+  const learningOverview = useMemo(() => getLearningOverview(displayCourses), [displayCourses]);
+  const courseTopics = useMemo(
+    () =>
+      courseCategories
+        .filter((category) => category.key !== 'all')
+        .map((category) => {
+          const matches = displayCourses.filter((course) => course.category === category.key);
+          return {
+            ...category,
+            count: matches.length,
+            leadCourse: matches[0] ?? null,
+          };
+        })
+        .filter((category) => category.count > 0),
+    [displayCourses],
+  );
+  const featuredContinueCourse = continueLearningCourses[0] ?? highlightedCourse;
 
   if (selectedCourse) {
     return (
@@ -68,7 +114,11 @@ export function CoursesView({
         progress={selectedCourse.progressValue}
         recentLesson={selectedCourse.recentLessonLabel}
         onBack={() => onSelectCourse(null)}
+        runtimeSyncState={runtimeSyncState}
         onUpdateRuntime={(updater) => onUpdateRuntime(selectedCourse.id, updater)}
+        libraryRuntimeRecord={libraryRuntimeRecord}
+        onUpdateLibraryRuntime={onUpdateLibraryRuntime}
+        onOpenResource={onOpenResource}
         communityPostCount={selectedCoursePosts.length}
         latestCommunityPost={selectedCoursePosts[0] ?? null}
         onOpenCommunity={() => onOpenCommunityCourse(selectedCourse.id)}
@@ -91,6 +141,24 @@ export function CoursesView({
             <span>{highlightedCourse.lessons} 课时</span>
             <span>{highlightedCourse.progressValue}% 完成</span>
           </div>
+          <div className="hero-actions">
+            <button type="button" className="primary-btn compact-btn" onClick={() => onSelectCourse(highlightedCourse.id)}>
+              {highlightedCourse.progressValue > 0 ? '继续当前课程' : '打开课程详情'}
+            </button>
+            {highlightedCourse.primaryLinkedResource ? (
+              <button
+                type="button"
+                className="secondary-btn compact-btn"
+                onClick={() => onOpenResource(highlightedCourse.primaryLinkedResource!.resourceId)}
+              >
+                {highlightedCourse.primaryLinkedResource.ctaLabel}
+              </button>
+            ) : featuredContinueCourse && featuredContinueCourse.id !== highlightedCourse.id ? (
+              <button type="button" className="secondary-btn compact-btn" onClick={() => onSelectCourse(featuredContinueCourse.id)}>
+                查看最近学习
+              </button>
+            ) : null}
+          </div>
         </section>
       ) : (
         <section className="content-card">
@@ -101,20 +169,107 @@ export function CoursesView({
         </section>
       )}
 
+      {runtimeSyncState && (
+        <section className="content-card sync-feedback-card">
+          <p className="eyebrow">Progress Sync</p>
+          <p
+            className={`backup-feedback ${
+              runtimeSyncState.tone === 'error'
+                ? 'backup-feedback-error'
+                : runtimeSyncState.tone === 'syncing'
+                  ? 'backup-feedback-syncing'
+                  : 'backup-feedback-success'
+            }`}
+          >
+            {runtimeSyncState.message}
+          </p>
+        </section>
+      )}
+
+      <section className="summary-grid">
+        <article className="summary-card">
+          <span className="summary-label">课程总数</span>
+          <strong>{displayCourses.length}</strong>
+        </article>
+        <article className="summary-card">
+          <span className="summary-label">进行中</span>
+          <strong>{learningOverview.activeCourseCount}</strong>
+        </article>
+        <article className="summary-card">
+          <span className="summary-label">已完成课时</span>
+          <strong>{learningOverview.completedLessonCount}</strong>
+        </article>
+        <article className="summary-card">
+          <span className="summary-label">最近学习</span>
+          <strong>{learningOverview.recentCourseTitle}</strong>
+        </article>
+      </section>
+
       {continueLearningCourses.length > 0 && (
         <section className="continue-learning-card">
           <div className="module-header">
             <div>
               <p className="eyebrow">Continue Learning</p>
               <h2>继续学习</h2>
+              <p className="backup-feedback">回到你最近打开的课程，也可以直接跳回这门课当前最该继续的资料。</p>
             </div>
+            <span className="post-badge">最近学习</span>
           </div>
           <div className="continue-learning-grid">
             {continueLearningCourses.map((course) => (
-              <button key={course.id} type="button" className="continue-learning-item" onClick={() => onSelectCourse(course.id)}>
+              <article key={course.id} className="continue-learning-item">
                 <span className="continue-learning-title">{course.title}</span>
                 <span className="continue-learning-subtitle">{course.recentLessonLabel}</span>
                 <span className="continue-learning-meta">{course.lastStudiedLabel}</span>
+                {course.primaryLinkedResource && (
+                  <span className="continue-learning-meta">
+                    资料：{course.primaryLinkedResource.resourceTitle} · {course.primaryLinkedResource.meta}
+                  </span>
+                )}
+                <div className="lesson-actions">
+                  <button type="button" className="primary-btn compact-btn" onClick={() => onSelectCourse(course.id)}>
+                    继续课程
+                  </button>
+                  {course.primaryLinkedResource && (
+                    <button
+                      type="button"
+                      className="secondary-btn compact-btn"
+                      onClick={() => onOpenResource(course.primaryLinkedResource!.resourceId)}
+                    >
+                      {course.primaryLinkedResource.ctaLabel}
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {courseTopics.length > 0 && (
+        <section className="content-card">
+          <div className="module-header">
+            <div>
+              <p className="eyebrow">Course Topics</p>
+              <h2>课程专题</h2>
+            </div>
+            <span className="post-badge">{courseTopics.length} 个方向</span>
+          </div>
+          <p className="backup-feedback">先按课程方向整理入口，后面继续把恢复快照里的课程总览和分类层级逐步搬回源码版。</p>
+          <div className="course-topic-grid">
+            {courseTopics.map((topic) => (
+              <button
+                key={topic.key}
+                type="button"
+                className={`course-topic-card ${activeCategory === topic.key ? 'active' : ''}`}
+                onClick={() => setActiveCategory(topic.key)}
+              >
+                <div className="course-topic-meta">
+                  <span className="post-badge">{topic.count} 门课程</span>
+                  <span className="course-updated">{topic.leadCourse?.degree ?? '课程方向'}</span>
+                </div>
+                <strong>{topic.label}</strong>
+                <span>{topic.leadCourse?.title ?? '继续补充该方向的课程内容。'}</span>
               </button>
             ))}
           </div>
@@ -143,6 +298,11 @@ export function CoursesView({
             </button>
           ))}
         </div>
+        <p className="backup-feedback">
+          当前显示 {filteredCourses.length} 门课程
+          {activeCategory !== 'all' ? ` · 已切换到 ${courseCategories.find((item) => item.key === activeCategory)?.label}` : ''}
+          {search.trim() ? ` · 关键词“${search.trim()}”` : ''}
+        </p>
       </section>
 
       <section className="course-list">
@@ -170,7 +330,7 @@ export function CoursesView({
                 <span style={{ width: `${course.progressValue}%` }} />
               </div>
               <p className="course-footer">
-                讲师：{course.instructor} · {course.completedLessonsCount}/{course.syllabus.length} 课时完成 · 资料已读 {course.viewedMaterialsCount} 份 · {course.lastStudiedLabel}
+                讲师：{course.instructor} · {course.completedLessonsCount}/{course.syllabus.length} 课时完成 · 已接图书馆 {course.linkedMaterialsCount} 份 · 阅读中 {course.inProgressMaterialsCount} 份 · 已下载 {course.downloadedMaterialsCount} 份 · {course.lastStudiedLabel}
               </p>
             </article>
           ))

@@ -1,4 +1,4 @@
-import { ChatMessage, CommunityContact, CommunityNotification, ConversationPreview } from '../../types/app';
+import { ChatMessage, CommunityContact, CommunityNotification, CommunityPostPreview, ConversationPreview, VoiceRoom } from '../../types/app';
 
 const weekdayMap: Record<string, number> = {
   日: 0,
@@ -177,7 +177,20 @@ export function createOutgoingMessage(content: string): ChatMessage {
     sender: 'me',
     content,
     time: formatConversationTime(),
+    type: 'text',
   };
+}
+
+export function getChatMessagePreview(message: ChatMessage) {
+  if (message.type === 'voice_room_invite' && message.voiceRoomTitle) {
+    return `语音房邀请：${message.voiceRoomTitle}`;
+  }
+
+  if (message.type === 'voice_room_recap' && message.voiceRoomRecapHeadline) {
+    return `会后摘要：${message.voiceRoomRecapHeadline}`;
+  }
+
+  return message.content;
 }
 
 export function createAutoReplyMessage(conversation: ConversationPreview): ChatMessage {
@@ -192,6 +205,76 @@ export function createAutoReplyMessage(conversation: ConversationPreview): ChatM
     sender: 'other',
     content: contentMap[conversation.id] ?? `${conversation.name} 已收到，后续会继续跟进这条消息。`,
     time: formatConversationTime(),
+    type: 'text',
+  };
+}
+
+export function createVoiceRoomInviteMessage(room: VoiceRoom): ChatMessage {
+  return {
+    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    sender: 'me',
+    type: 'voice_room_invite',
+    content: `邀请你加入语音房「${room.title}」`,
+    time: formatConversationTime(),
+    voiceRoomId: room.id,
+    voiceRoomTitle: room.title,
+    voiceRoomSummary: room.summary,
+    voiceRoomTopic: room.topic,
+  };
+}
+
+function getVoiceRoomRecapBadge(room: VoiceRoom): CommunityPostPreview['badge'] {
+  if (room.topic === '代祷陪伴') {
+    return '代祷实践';
+  }
+
+  if (room.courseId) {
+    return '课程感悟';
+  }
+
+  return '恢复记录';
+}
+
+export function createVoiceRoomRecapMessage(room: VoiceRoom): ChatMessage {
+  const recap = room.recap;
+  if (!recap) {
+    throw new Error('Voice room recap message requires an existing recap.');
+  }
+
+  return {
+    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    sender: 'me',
+    type: 'voice_room_recap',
+    content: `会后摘要：${recap.headline}`,
+    time: formatConversationTime(),
+    voiceRoomId: room.id,
+    voiceRoomTitle: room.title,
+    voiceRoomSummary: room.summary,
+    voiceRoomTopic: room.topic,
+    voiceRoomRecapHeadline: recap.headline,
+    voiceRoomRecapHighlights: recap.highlights,
+  };
+}
+
+export function createVoiceRoomRecapPost(room: VoiceRoom, authorName: string, authorRole: string): CommunityPostPreview {
+  const recap = room.recap;
+  if (!recap) {
+    throw new Error('Voice room recap post requires an existing recap.');
+  }
+
+  return {
+    id: `post-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    author: authorName,
+    role: authorRole,
+    time: '刚刚',
+    content: [recap.headline, ...recap.highlights.map((item, index) => `${index + 1}. ${item}`)].join('\n'),
+    badge: getVoiceRoomRecapBadge(room),
+    courseId: room.courseId,
+    voiceRoomId: room.id,
+    voiceRoomTitle: room.title,
+    likes: 0,
+    liked: false,
+    comments: [],
   };
 }
 
@@ -234,6 +317,7 @@ export function createContactIntroMessage(contact: CommunityContact): ChatMessag
         ? `${contact.name} 已上线，我们可以继续对接课程资料和校友圈里的讨论。`
         : `${contact.name} 已上线，后续可以从这里继续恢复聊天和协作链路。`,
     time: formatConversationTime(),
+    type: 'text',
   };
 }
 
@@ -241,10 +325,12 @@ export function buildConversationNotification(conversation: ConversationPreview,
   return {
     id: `notice-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     title: `${conversation.name} 发来新消息`,
-    detail: message.content,
+    detail: getChatMessagePreview(message),
     time: '刚刚',
     type: 'interaction',
     read: false,
     conversationId: conversation.id,
+    ...(message.voiceRoomId ? { voiceRoomId: message.voiceRoomId } : undefined),
+    ...(message.voiceRoomTitle ? { voiceRoomTitle: message.voiceRoomTitle } : undefined),
   };
 }

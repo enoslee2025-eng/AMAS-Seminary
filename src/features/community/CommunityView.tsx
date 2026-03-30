@@ -1,31 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { communityChatMessages, communityContacts, courses, libraryResources } from '../../data/mockData';
-import { usePersistentState } from '../../hooks/usePersistentState';
+import { communityContacts, courses, libraryResources } from '../../data/mockData';
+import { useScopedPersistentState } from '../../hooks/usePersistentState';
 import {
   ChatMessage,
+  ChatMessageRecord,
   CommunityContact,
   CommunityNotification,
   CommunityNotificationType,
   CommunityPostPreview,
   ConversationPreview,
+  ProfileState,
+  VoiceRoom,
+  WorkspaceStatus,
 } from '../../types/app';
 import { ChatView } from './ChatView';
+import { VoiceRoomsPanel } from './VoiceRoomsPanel';
 import { createProcessedQueueLogItem } from '../profile/profileState';
 import { useProcessedQueueLog } from '../profile/useProcessedQueueLog';
 import {
-  buildConversationFromContact,
-  buildConversationNotification,
-  createAutoReplyMessage,
-  createContactIntroMessage,
-  filterContacts,
+    buildConversationFromContact,
+    buildConversationNotification,
+    createAutoReplyMessage,
+    createContactIntroMessage,
+    createVoiceRoomRecapMessage,
+    createVoiceRoomRecapPost,
+    createVoiceRoomInviteMessage,
+    filterContacts,
+    getChatMessagePreview,
   getDisplayTimeSortValue,
   sortNotifications,
   getContactConversationId,
   sortConversations,
 } from './communityState';
 
-type CommunitySection = 'feed' | 'conversations' | 'notifications';
+type CommunitySection = 'feed' | 'rooms' | 'conversations' | 'notifications';
 type FeedFilter = 'all' | '课程感悟' | '代祷实践' | '系统公告' | '恢复记录';
 type NotificationFilter = 'all' | 'unread' | 'interaction' | 'system';
 type PostFollowUpAction =
@@ -35,6 +44,8 @@ type PostFollowUpAction =
 export function CommunityView({
   onOpenCourse,
   onOpenResource,
+  profile,
+  storageScopeKey,
   courseFocus,
   inboxIntent,
   posts,
@@ -43,9 +54,17 @@ export function CommunityView({
   onUpdateConversations,
   notifications,
   onUpdateNotifications,
+  chatMessages,
+  onUpdateChatMessages,
+  voiceRooms,
+  onUpdateVoiceRooms,
+  workspaceMode,
+  workspaceStatusTone,
 }: {
   onOpenCourse: (courseId: string) => void;
   onOpenResource: (resourceId: string) => void;
+  profile: ProfileState;
+  storageScopeKey: string;
   courseFocus: { courseId: string; token: number; mode: 'feed' | 'compose'; draft?: string } | null;
   inboxIntent: { token: number; section: 'conversations' | 'notifications'; conversationId?: string; notificationId?: string } | null;
   posts: CommunityPostPreview[];
@@ -54,29 +73,77 @@ export function CommunityView({
   onUpdateConversations: Dispatch<SetStateAction<ConversationPreview[]>>;
   notifications: CommunityNotification[];
   onUpdateNotifications: Dispatch<SetStateAction<CommunityNotification[]>>;
+  chatMessages: ChatMessageRecord;
+  onUpdateChatMessages: Dispatch<SetStateAction<ChatMessageRecord>>;
+  voiceRooms: VoiceRoom[];
+  onUpdateVoiceRooms: Dispatch<SetStateAction<VoiceRoom[]>>;
+  workspaceMode: 'local' | 'remote';
+  workspaceStatusTone: WorkspaceStatus['tone'] | null;
 }) {
-  const [activeSection, setActiveSection] = usePersistentState<CommunitySection>('amas_community_section', 'feed');
-  const [selectedConversationId, setSelectedConversationId] = usePersistentState<string | null>('amas_community_selected_conversation', null);
-  const [chatReturnSection, setChatReturnSection] = usePersistentState<CommunitySection>('amas_community_chat_return_section', 'conversations');
-  const [highlightedPostId, setHighlightedPostId] = usePersistentState<string | null>('amas_community_highlight_post', null);
-  const [feedFilter, setFeedFilter] = usePersistentState<FeedFilter>('amas_community_feed_filter', 'all');
-  const [activeCourseContextId, setActiveCourseContextId] = usePersistentState<string | null>('amas_community_course_context', null);
-  const [conversationSearch, setConversationSearch] = usePersistentState('amas_community_conversation_search', '');
-  const [contactSearch, setContactSearch] = usePersistentState('amas_community_contact_search', '');
-  const [notificationFilter, setNotificationFilter] = usePersistentState<NotificationFilter>('amas_community_notification_filter', 'all');
-  const [chatMessages, setChatMessages] = usePersistentState<Record<string, ChatMessage[]>>('amas_community_chat_messages', communityChatMessages);
-  const [composerText, setComposerText] = usePersistentState('amas_community_composer_text', '');
-  const [composerCourseId, setComposerCourseId] = usePersistentState<string>('amas_community_composer_course', '');
-  const [activeCommentPostId, setActiveCommentPostId] = usePersistentState<string | null>('amas_community_comment_post', null);
-  const [commentDrafts, setCommentDrafts] = usePersistentState<Record<string, string>>('amas_community_comment_drafts', {});
+  const [activeSection, setActiveSection] = useScopedPersistentState<CommunitySection>('amas_community_section', storageScopeKey, 'feed');
+  const [selectedConversationId, setSelectedConversationId] = useScopedPersistentState<string | null>(
+    'amas_community_selected_conversation',
+    storageScopeKey,
+    null,
+  );
+  const [selectedRoomId, setSelectedRoomId] = useScopedPersistentState<string | null>(
+    'amas_community_selected_voice_room',
+    storageScopeKey,
+    null,
+  );
+  const [chatReturnSection, setChatReturnSection] = useScopedPersistentState<CommunitySection>(
+    'amas_community_chat_return_section',
+    storageScopeKey,
+    'conversations',
+  );
+  const [highlightedPostId, setHighlightedPostId] = useScopedPersistentState<string | null>(
+    'amas_community_highlight_post',
+    storageScopeKey,
+    null,
+  );
+  const [feedFilter, setFeedFilter] = useScopedPersistentState<FeedFilter>('amas_community_feed_filter', storageScopeKey, 'all');
+  const [activeCourseContextId, setActiveCourseContextId] = useScopedPersistentState<string | null>(
+    'amas_community_course_context',
+    storageScopeKey,
+    null,
+  );
+  const [conversationSearch, setConversationSearch] = useScopedPersistentState(
+    'amas_community_conversation_search',
+    storageScopeKey,
+    '',
+  );
+  const [contactSearch, setContactSearch] = useScopedPersistentState('amas_community_contact_search', storageScopeKey, '');
+  const [notificationFilter, setNotificationFilter] = useScopedPersistentState<NotificationFilter>(
+    'amas_community_notification_filter',
+    storageScopeKey,
+    'all',
+  );
+  const [composerText, setComposerText] = useScopedPersistentState('amas_community_composer_text', storageScopeKey, '');
+  const [composerCourseId, setComposerCourseId] = useScopedPersistentState<string>(
+    'amas_community_composer_course',
+    storageScopeKey,
+    '',
+  );
+  const [activeCommentPostId, setActiveCommentPostId] = useScopedPersistentState<string | null>(
+    'amas_community_comment_post',
+    storageScopeKey,
+    null,
+  );
+  const [commentDrafts, setCommentDrafts] = useScopedPersistentState<Record<string, string>>(
+    'amas_community_comment_drafts',
+    storageScopeKey,
+    {},
+  );
   const [highlightedNotificationId, setHighlightedNotificationId] = useState<string | null>(null);
-  const [, , appendProcessedQueueLog] = useProcessedQueueLog();
+  const [, , appendProcessedQueueLog] = useProcessedQueueLog(storageScopeKey);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedConversationIdRef = useRef<string | null>(selectedConversationId);
   const conversationsRef = useRef<ConversationPreview[]>(conversations);
   const replyTimersRef = useRef<number[]>([]);
   const unreadCount = conversations.reduce((sum, item) => sum + item.unread, 0);
   const unreadNotifications = notifications.filter((item) => !item.read).length;
+  const liveRoomCount = voiceRooms.filter((room) => room.status === 'live').length;
+  const joinedRoomCount = voiceRooms.filter((room) => room.joined).length;
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.id === selectedConversationId) ?? null,
     [conversations, selectedConversationId],
@@ -131,10 +198,28 @@ export function CommunityView({
     }),
     [notifications],
   );
+  const currentUserIdentity = useMemo(
+    () => ({
+      name: profile.name.trim() || 'AMAS 学员',
+      role: profile.role.trim() || '亚洲宣教神学院 学员',
+    }),
+    [profile.name, profile.role],
+  );
 
   const filteredNotifications = useMemo(() => {
     return sortNotifications(notifications, notificationFilter);
   }, [notificationFilter, notifications]);
+  const communitySyncSummary = useMemo(() => {
+    if (workspaceMode === 'local') {
+      return '当前所有动态、语音房壳子、消息和通知都保存在本地恢复工作区。';
+    }
+
+    if (workspaceStatusTone === 'degraded' || workspaceStatusTone === 'expired') {
+      return '当前变更会先保存在本地，连接恢复后再通过统一快照写回远端。';
+    }
+
+    return '当前变更会通过统一快照跟随账号一起写回远端，但真实语音与独立互动服务仍在后续恢复清单里。';
+  }, [workspaceMode, workspaceStatusTone]);
   const nextUnreadNotification = useMemo(() => sortNotifications(notifications, 'unread')[0] ?? null, [notifications]);
   const topUnreadConversation = useMemo(
     () =>
@@ -171,6 +256,30 @@ export function CommunityView({
     read: false,
     ...extras,
   });
+
+  const handleNotificationAction = (notification: CommunityNotification, action: (shouldLog: boolean) => void) => {
+    const shouldLog = !notification.read;
+    onUpdateNotifications((current) =>
+      current.map((item) => (item.id === notification.id ? { ...item, read: true } : item)),
+    );
+    action(shouldLog);
+  };
+
+  const resolveNotificationPost = (notification: CommunityNotification) =>
+    notification.postId ? posts.find((item) => item.id === notification.postId) ?? null : null;
+
+  const resolveNotificationVoiceRoomId = (
+    notification: CommunityNotification,
+    relatedPost: CommunityPostPreview | null = resolveNotificationPost(notification),
+  ) => notification.voiceRoomId ?? relatedPost?.voiceRoomId ?? null;
+
+  const resolveNotificationVoiceRoom = (
+    notification: CommunityNotification,
+    relatedPost: CommunityPostPreview | null = resolveNotificationPost(notification),
+  ) => {
+    const roomId = resolveNotificationVoiceRoomId(notification, relatedPost);
+    return roomId ? voiceRooms.find((item) => item.id === roomId) ?? null : null;
+  };
 
   const logLearningAction = (title: string, detail: string, actionLabel: string) => {
     appendProcessedQueueLog(
@@ -265,41 +374,87 @@ export function CommunityView({
     }
   };
 
-  const handleNotificationClick = (notification: CommunityNotification) => {
-    const wasUnread = !notification.read;
-    onUpdateNotifications((current) =>
-      current.map((item) => (item.id === notification.id ? { ...item, read: true } : item)),
-    );
-
-    if (notification.postId) {
-      const relatedPost = posts.find((item) => item.id === notification.postId) ?? null;
-      setFeedFilter('all');
-      setActiveCourseContextId(notification.courseId ?? relatedPost?.courseId ?? null);
-      setHighlightedPostId(notification.postId);
-      setActiveCommentPostId(notification.postId);
-      setActiveSection('feed');
-      if (wasUnread) {
-        logReminderAction(notification.title, truncateProcessedText(notification.detail), '处理通知');
-      }
-      return;
+  const handleOpenNotificationPost = (
+    notification: CommunityNotification,
+    relatedPost: CommunityPostPreview | null = resolveNotificationPost(notification),
+    shouldLog = !notification.read,
+  ) => {
+    if (!notification.postId || !relatedPost) {
+      return false;
     }
 
-    if (notification.courseId) {
-      if (wasUnread) {
-        logReminderAction(notification.title, truncateProcessedText(notification.detail), '处理通知');
-      }
-      onOpenCourse(notification.courseId);
-      return;
-    }
-
-    if (notification.conversationId) {
-      handleOpenConversation(notification.conversationId);
-      return;
-    }
-
-    if (wasUnread) {
+    setSelectedConversationId(null);
+    setFeedFilter('all');
+    setActiveCourseContextId(notification.courseId ?? relatedPost.courseId ?? null);
+    setHighlightedPostId(notification.postId);
+    setActiveCommentPostId(notification.postId);
+    setActiveSection('feed');
+    if (shouldLog) {
       logReminderAction(notification.title, truncateProcessedText(notification.detail), '处理通知');
     }
+    return true;
+  };
+
+  const handleOpenNotificationVoiceRoom = (
+    notification: CommunityNotification,
+    roomId: string | null = resolveNotificationVoiceRoomId(notification),
+    shouldLog = !notification.read,
+  ) => {
+    if (!roomId) {
+      return false;
+    }
+
+    setSelectedConversationId(null);
+    setSelectedRoomId(roomId);
+    setActiveSection('rooms');
+    if (shouldLog) {
+      logReminderAction(notification.title, truncateProcessedText(notification.detail), '处理通知');
+    }
+    return true;
+  };
+
+  const handleOpenNotificationCourse = (
+    notification: CommunityNotification,
+    courseId: string | undefined = notification.courseId,
+    shouldLog = !notification.read,
+  ) => {
+    if (!courseId) {
+      return false;
+    }
+
+    if (shouldLog) {
+      logReminderAction(notification.title, truncateProcessedText(notification.detail), '处理通知');
+    }
+    onOpenCourse(courseId);
+    return true;
+  };
+
+  const handleNotificationClick = (notification: CommunityNotification) => {
+    const relatedPost = resolveNotificationPost(notification);
+    const relatedVoiceRoomId = resolveNotificationVoiceRoomId(notification, relatedPost);
+
+    handleNotificationAction(notification, (shouldLog) => {
+      if (handleOpenNotificationPost(notification, relatedPost, shouldLog)) {
+        return;
+      }
+
+      if (handleOpenNotificationVoiceRoom(notification, relatedVoiceRoomId, shouldLog)) {
+        return;
+      }
+
+      if (handleOpenNotificationCourse(notification, notification.courseId, shouldLog)) {
+        return;
+      }
+
+      if (notification.conversationId) {
+        handleOpenConversation(notification.conversationId);
+        return;
+      }
+
+      if (shouldLog) {
+        logReminderAction(notification.title, truncateProcessedText(notification.detail), '处理通知');
+      }
+    });
   };
 
   const handleMarkAllNotificationsRead = () => {
@@ -333,7 +488,7 @@ export function CommunityView({
       const introMessage = createContactIntroMessage(contact);
 
       onUpdateConversations((current) => [buildConversationFromContact(contact), ...current.filter((item) => item.id !== conversationId)]);
-      setChatMessages((current) => ({
+      onUpdateChatMessages((current) => ({
         ...current,
         [conversationId]: current[conversationId] ?? [introMessage],
       }));
@@ -355,12 +510,12 @@ export function CommunityView({
   };
 
   const handleSendMessage = (conversationId: string, message: ChatMessage) => {
-    setChatMessages((current) => ({
+    onUpdateChatMessages((current) => ({
       ...current,
       [conversationId]: [...(current[conversationId] ?? []), message],
     }));
     touchConversation(conversationId, {
-      subtitle: message.content,
+      subtitle: getChatMessagePreview(message),
       time: message.time,
       unread: 0,
     });
@@ -370,12 +525,12 @@ export function CommunityView({
       return;
     }
 
-    logLearningAction(`回复会话：${conversation.name}`, truncateProcessedText(message.content), '发送消息');
+    logLearningAction(`回复会话：${conversation.name}`, truncateProcessedText(getChatMessagePreview(message)), '发送消息');
 
     const timer = window.setTimeout(() => {
       const latestConversation = conversationsRef.current.find((item) => item.id === conversationId) ?? conversation;
       const reply = createAutoReplyMessage(latestConversation);
-      setChatMessages((current) => ({
+      onUpdateChatMessages((current) => ({
         ...current,
         [conversationId]: [...(current[conversationId] ?? []), reply],
       }));
@@ -534,9 +689,111 @@ export function CommunityView({
     replyTimersRef.current.forEach((timer) => window.clearTimeout(timer));
   }, []);
 
+  const handleOpenVoiceRoom = (roomId: string) => {
+    setSelectedConversationId(null);
+    setSelectedRoomId(roomId);
+    setActiveSection('rooms');
+  };
+
+  const handleShareVoiceRoom = (roomId: string, conversationId: string) => {
+    const room = voiceRooms.find((item) => item.id === roomId) ?? null;
+    const conversation = conversations.find((item) => item.id === conversationId) ?? null;
+    if (!room || !conversation) {
+      return;
+    }
+
+    const inviteMessage = createVoiceRoomInviteMessage(room);
+    onUpdateChatMessages((current) => ({
+      ...current,
+      [conversationId]: [...(current[conversationId] ?? []), inviteMessage],
+    }));
+    touchConversation(conversationId, {
+      subtitle: getChatMessagePreview(inviteMessage),
+      time: inviteMessage.time,
+      unread: 0,
+    });
+    prependNotification(
+      createNotification(
+        `已发送语音房邀请：${room.title}`,
+        `这条邀请已经发送到 ${conversation.name}，对方可从会话里直接打开语音房。`,
+        'system',
+        {
+          conversationId,
+          ...(room.courseId ? { courseId: room.courseId } : undefined),
+          voiceRoomId: room.id,
+          voiceRoomTitle: room.title,
+        },
+      ),
+    );
+    logLearningAction(`分享语音房：${room.title}`, `${conversation.name} · ${room.title}`, '发送邀请');
+  };
+
+  const handlePublishVoiceRoomRecap = (roomId: string) => {
+    const room = voiceRooms.find((item) => item.id === roomId) ?? null;
+    if (!room?.recap) {
+      return null;
+    }
+
+    const recapPost = createVoiceRoomRecapPost(room, currentUserIdentity.name, currentUserIdentity.role);
+    onUpdatePosts((current) => [recapPost, ...current]);
+    prependNotification(
+      createNotification(
+        `已发布会后摘要：${room.title}`,
+        '这份会后摘要已经回流到校友动态，可继续联动课程讨论与评论。',
+        'system',
+        {
+          postId: recapPost.id,
+          ...(room.courseId ? { courseId: room.courseId } : undefined),
+          voiceRoomId: room.id,
+          voiceRoomTitle: room.title,
+        },
+      ),
+    );
+    logLearningAction(`发布会后摘要：${room.title}`, truncateProcessedText(room.recap.headline), '发布摘要');
+    setFeedFilter('all');
+    setHighlightedPostId(recapPost.id);
+    setActiveCourseContextId(room.courseId ?? null);
+    return recapPost.id;
+  };
+
+  const handleShareVoiceRoomRecap = (roomId: string, conversationId: string) => {
+    const room = voiceRooms.find((item) => item.id === roomId) ?? null;
+    const conversation = conversations.find((item) => item.id === conversationId) ?? null;
+    if (!room?.recap || !conversation) {
+      return false;
+    }
+
+    const recapMessage = createVoiceRoomRecapMessage(room);
+    onUpdateChatMessages((current) => ({
+      ...current,
+      [conversationId]: [...(current[conversationId] ?? []), recapMessage],
+    }));
+    touchConversation(conversationId, {
+      subtitle: getChatMessagePreview(recapMessage),
+      time: recapMessage.time,
+      unread: 0,
+    });
+    prependNotification(
+      createNotification(
+        `已发送会后摘要：${room.title}`,
+        `这份会后摘要已经发送到 ${conversation.name}，对方可从会话里直接查看并回到房间。`,
+        'system',
+        {
+          conversationId,
+          ...(room.courseId ? { courseId: room.courseId } : undefined),
+          voiceRoomId: room.id,
+          voiceRoomTitle: room.title,
+        },
+      ),
+    );
+    logLearningAction(`分享会后摘要：${room.title}`, `${conversation.name} · ${room.recap.headline}`, '发送摘要');
+    return true;
+  };
+
   if (selectedConversation) {
     return (
       <ChatView
+        storageScopeKey={storageScopeKey}
         conversation={selectedConversation}
         messages={chatMessages[selectedConversation.id] ?? []}
         onBack={() => {
@@ -546,6 +803,7 @@ export function CommunityView({
         onSend={(message) => handleSendMessage(selectedConversation.id, message)}
         onTogglePinned={() => updateConversationFlags(selectedConversation.id, { pinned: !selectedConversation.pinned })}
         onToggleMuted={() => updateConversationFlags(selectedConversation.id, { muted: !selectedConversation.muted })}
+        onOpenVoiceRoom={handleOpenVoiceRoom}
       />
     );
   }
@@ -554,11 +812,12 @@ export function CommunityView({
     <div className="community-layout">
       <section className="content-card community-hero-card">
         <div>
-          <p className="eyebrow">Community Rebuild</p>
-          <h2>校友圈源码已进入恢复阶段</h2>
+          <p className="eyebrow">Community Sandbox</p>
+          <h2>校友圈暂作为次级恢复区</h2>
           <p className="hero-copy">
-            当前先恢复动态流和会话列表的基础结构。下一轮会继续接通知、通讯录和聊天跳转逻辑，把这一块从恢复壳体推进到真正可交互状态。
+            当前先保留动态流、语音房壳子、会话列表和通知入口的次级恢复能力。社区仍不是最先独立接后端的主线模块，但现在已经纳入统一快照链路，能跟随工作区一起保留和回写。
           </p>
+          <p className="toolbar-helper">{communitySyncSummary}</p>
         </div>
         <div className="community-summary-grid">
           <article className="summary-card">
@@ -568,6 +827,14 @@ export function CommunityView({
           <article className="summary-card">
             <span className="summary-label">会话数量</span>
             <strong>{conversations.length}</strong>
+          </article>
+          <article className="summary-card">
+            <span className="summary-label">语音房数量</span>
+            <strong>{liveRoomCount}</strong>
+          </article>
+          <article className="summary-card">
+            <span className="summary-label">已加入房间</span>
+            <strong>{joinedRoomCount}</strong>
           </article>
           <article className="summary-card">
             <span className="summary-label">未读提醒</span>
@@ -581,13 +848,20 @@ export function CommunityView({
       </section>
 
       <section className="toolbar-card">
-        <div className="segmented-control segmented-control-triple">
+        <div className="segmented-control segmented-control-quad">
           <button
             type="button"
             className={activeSection === 'feed' ? 'segmented-btn active' : 'segmented-btn'}
             onClick={() => setActiveSection('feed')}
           >
             校友动态
+          </button>
+          <button
+            type="button"
+            className={activeSection === 'rooms' ? 'segmented-btn active' : 'segmented-btn'}
+            onClick={() => setActiveSection('rooms')}
+          >
+            语音房
           </button>
           <button
             type="button"
@@ -606,10 +880,12 @@ export function CommunityView({
         </div>
         <p className="toolbar-helper">
           {activeSection === 'feed'
-            ? '课程感悟和系统公告先以静态数据重建，后续会接入通知高亮和评论链路。'
-            : activeSection === 'conversations'
-              ? '会话列表先重建信息层，当前已经有本地聊天页，下一阶段接入真实已读状态和通讯录映射。'
-              : '通知中心已开始恢复，点击通知可回到课程详情或对应会话。'}
+            ? `${communitySyncSummary} 课程感悟和系统公告的独立互动链路会在后续继续补齐。`
+            : activeSection === 'rooms'
+              ? `${communitySyncSummary} 房间元数据、成员壳子和提醒跳转已经纳入统一快照，真实音频链路会在后续阶段独立接入。`
+              : activeSection === 'conversations'
+              ? `${communitySyncSummary} 会话列表当前仍以本地聊天页和联系人映射为主，真实消息服务会放在课程/图书馆基础能力之后再接。`
+              : `${communitySyncSummary} 通知中心当前仍以恢复提醒回流为主，后续再统一切到真正的通知服务。`}
         </p>
       </section>
 
@@ -669,8 +945,8 @@ export function CommunityView({
                   onUpdatePosts((current) => [
                     {
                       id: postId,
-                      author: 'Enos Lee',
-                      role: 'AMAS Seminary Product Recovery',
+                      author: currentUserIdentity.name,
+                      role: currentUserIdentity.role,
                       time: '刚刚',
                       content,
                       badge: composerCourseId ? '课程感悟' : '恢复记录',
@@ -812,11 +1088,14 @@ export function CommunityView({
             </section>
           )}
           {visibleFeedPosts.length > 0 ? (
-            visibleFeedPosts.map((post) => {
-              const followUpAction = resolvePostFollowUpAction(post);
+	            visibleFeedPosts.map((post) => {
+	              const followUpAction = resolvePostFollowUpAction(post);
+              const relatedVoiceRoom = post.voiceRoomId ? voiceRooms.find((item) => item.id === post.voiceRoomId) ?? null : null;
+              const hasVoiceRoomLink = Boolean(post.voiceRoomId);
+              const hasCourseLink = Boolean(post.courseId);
 
-              return (
-                <article className={highlightedPostId === post.id ? 'module-card post-card highlighted' : 'module-card post-card'} key={post.id}>
+	              return (
+	                <article className={highlightedPostId === post.id ? 'module-card post-card highlighted' : 'module-card post-card'} key={post.id}>
                 <div className="post-meta">
                   <div>
                     <p className="post-author">{post.author}</p>
@@ -869,21 +1148,34 @@ export function CommunityView({
                     评论 {post.comments.length}
                   </button>
                 </div>
-                {post.courseId ? (
-                  <div className="post-footer">
-                    <span>已关联课程内容，可直接跳回课程详情继续恢复链路。</span>
-                    <div className="contact-card-actions">
-                      {followUpAction?.kind === 'contact' && (
-                        <button type="button" className="secondary-btn compact-btn" onClick={() => handleStartConversation(followUpAction.contact)}>
-                          {followUpAction.label}
-                        </button>
-                      )}
-                      <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCourse(post.courseId!)}>
-                        打开关联课程
-                      </button>
-                    </div>
-                  </div>
-                ) : (
+	                {hasCourseLink || hasVoiceRoomLink ? (
+	                  <div className="post-footer">
+	                    <span>
+                        {hasCourseLink && hasVoiceRoomLink
+                          ? '这条动态已经同时关联课程和语音房，可回房继续讨论，也可跳回课程详情。'
+                          : hasVoiceRoomLink
+                            ? '这条动态来自语音房整理纪要，可直接回到对应房间继续查看。'
+                            : '已关联课程内容，可直接跳回课程详情继续恢复链路。'}
+                      </span>
+	                    <div className="contact-card-actions">
+	                      {followUpAction?.kind === 'contact' && (
+	                        <button type="button" className="secondary-btn compact-btn" onClick={() => handleStartConversation(followUpAction.contact)}>
+	                          {followUpAction.label}
+	                        </button>
+	                      )}
+                        {hasVoiceRoomLink && (
+                          <button type="button" className="secondary-btn compact-btn" onClick={() => handleOpenVoiceRoom(post.voiceRoomId!)}>
+                            {relatedVoiceRoom?.status === 'ended' ? '查看房间摘要' : '回到语音房'}
+                          </button>
+                        )}
+                        {hasCourseLink && (
+	                        <button type="button" className="secondary-btn compact-btn" onClick={() => onOpenCourse(post.courseId!)}>
+	                          打开关联课程
+	                        </button>
+                        )}
+	                    </div>
+	                  </div>
+	                ) : (
                   <div className="post-footer">
                     <span>这条内容当前作为系统信息源，后续会接入通知模块。</span>
                     {followUpAction?.kind === 'conversation' && (
@@ -945,7 +1237,7 @@ export function CommunityView({
                                       ...item.comments,
                                       {
                                         id: `comment-${Date.now()}`,
-                                        author: 'Enos Lee',
+                                        author: currentUserIdentity.name,
                                         content,
                                         time: '刚刚',
                                       },
@@ -990,6 +1282,22 @@ export function CommunityView({
             </section>
           )}
         </section>
+      ) : activeSection === 'rooms' ? (
+        <VoiceRoomsPanel
+          profile={profile}
+          storageScopeKey={storageScopeKey}
+          communitySyncSummary={communitySyncSummary}
+          selectedRoomId={selectedRoomId}
+          onSelectRoomId={setSelectedRoomId}
+          voiceRooms={voiceRooms}
+          onUpdateVoiceRooms={onUpdateVoiceRooms}
+          onUpdateNotifications={onUpdateNotifications}
+          conversations={conversations}
+          onShareVoiceRoom={handleShareVoiceRoom}
+          onPublishVoiceRoomRecap={handlePublishVoiceRoomRecap}
+          onShareVoiceRoomRecap={handleShareVoiceRoomRecap}
+          onOpenCourse={onOpenCourse}
+        />
       ) : activeSection === 'conversations' ? (
         <section className="conversation-list">
           <section className="content-card">
@@ -1230,39 +1538,132 @@ export function CommunityView({
               ))}
             </div>
           </section>
-          {filteredNotifications.map((notification) => (
-            <button
-              type="button"
-              className={
-                highlightedNotificationId === notification.id
-                  ? notification.read
-                    ? 'course-card notification-card highlighted'
-                    : 'course-card notification-card unread highlighted'
-                  : notification.read
-                    ? 'course-card notification-card'
-                    : 'course-card notification-card unread'
-              }
-              key={notification.id}
-              onClick={() => handleNotificationClick(notification)}
-            >
-              <div className="conversation-top">
-                <div>
-                  <p className="post-author">{notification.title}</p>
-                  <p className="course-summary">{notification.detail}</p>
-                </div>
-                <div className="conversation-meta">
-                  <span className="course-updated">{notification.time}</span>
-                  {!notification.read && <span className="unread-dot" />}
-                </div>
-              </div>
-              <div className="detail-chip-row">
-                <span className="post-badge">{notification.type === 'interaction' ? '互动' : '系统'}</span>
-                {notification.postId && <span className="post-badge">定位动态</span>}
-                {notification.courseId && <span className="post-badge">打开课程</span>}
-                {notification.conversationId && <span className="post-badge">打开会话</span>}
-              </div>
-            </button>
-          ))}
+          {filteredNotifications.map((notification) => {
+            const relatedPost = resolveNotificationPost(notification);
+            const relatedVoiceRoomId = resolveNotificationVoiceRoomId(notification, relatedPost);
+            const relatedVoiceRoom = resolveNotificationVoiceRoom(notification, relatedPost);
+            const voiceRoomTitle = relatedVoiceRoom?.title ?? notification.voiceRoomTitle ?? relatedPost?.voiceRoomTitle ?? '未命名语音房';
+            const voiceRoomActionLabel = relatedVoiceRoom?.status === 'ended' ? '查看房间摘要' : '回到语音房';
+            const voiceRoomStatusLabel = relatedVoiceRoom?.status === 'ended' ? '会后摘要' : '直播中';
+            const hasQuickActions = Boolean(
+              (notification.postId && relatedPost) || relatedVoiceRoomId || notification.conversationId || notification.courseId,
+            );
+            const voiceRoomContext =
+              relatedVoiceRoom
+                ? `${relatedVoiceRoom.topic} · ${relatedVoiceRoom.participantCount} 人参与${
+                    relatedVoiceRoom.courseId ? ' · 已关联课程' : ''
+                  }`
+                : '这条通知已经带上语音房上下文，可继续回房查看讨论过程或摘要。';
+
+            return (
+              <article
+                className={
+                  highlightedNotificationId === notification.id
+                    ? notification.read
+                      ? 'course-card notification-card highlighted'
+                      : 'course-card notification-card unread highlighted'
+                    : notification.read
+                      ? 'course-card notification-card'
+                      : 'course-card notification-card unread'
+                }
+                key={notification.id}
+              >
+                <button type="button" className="notification-card-main" onClick={() => handleNotificationClick(notification)}>
+                  <div className="conversation-top">
+                    <div>
+                      <p className="post-author">{notification.title}</p>
+                      <p className="course-summary">{notification.detail}</p>
+                    </div>
+                    <div className="conversation-meta">
+                      <span className="course-updated">{notification.time}</span>
+                      {!notification.read && <span className="unread-dot" />}
+                    </div>
+                  </div>
+                  <div className="detail-chip-row">
+                    <span className="post-badge">{notification.type === 'interaction' ? '互动' : '系统'}</span>
+                    {notification.postId && <span className="post-badge">定位动态</span>}
+                    {relatedVoiceRoomId && <span className="post-badge">关联语音房</span>}
+                    {notification.courseId && <span className="post-badge">打开课程</span>}
+                    {notification.conversationId && <span className="post-badge">打开会话</span>}
+                  </div>
+                  {relatedVoiceRoomId && (
+                    <div className="notification-context-card">
+                      <div className="notification-context-top">
+                        <span className="voice-room-invite-eyebrow">语音房上下文</span>
+                        <span
+                          className={
+                            relatedVoiceRoom?.status === 'ended'
+                              ? 'notification-status-pill notification-status-pill-ended'
+                              : 'notification-status-pill notification-status-pill-live'
+                          }
+                        >
+                          {voiceRoomStatusLabel}
+                        </span>
+                      </div>
+                      <strong>{voiceRoomTitle}</strong>
+                      <p>{voiceRoomContext}</p>
+                    </div>
+                  )}
+                </button>
+                {hasQuickActions && (
+                  <div className="notification-card-actions">
+                    {notification.postId && relatedPost && (
+                      <button
+                        type="button"
+                        className="secondary-btn compact-btn"
+                        onClick={() =>
+                          handleNotificationAction(notification, (shouldLog) => {
+                            handleOpenNotificationPost(notification, relatedPost, shouldLog);
+                          })
+                        }
+                      >
+                        查看动态
+                      </button>
+                    )}
+                    {relatedVoiceRoomId && (
+                      <button
+                        type="button"
+                        className="secondary-btn compact-btn"
+                        onClick={() =>
+                          handleNotificationAction(notification, (shouldLog) => {
+                            handleOpenNotificationVoiceRoom(notification, relatedVoiceRoomId, shouldLog);
+                          })
+                        }
+                      >
+                        {voiceRoomActionLabel}
+                      </button>
+                    )}
+                    {notification.conversationId && (
+                      <button
+                        type="button"
+                        className="secondary-btn compact-btn"
+                        onClick={() =>
+                          handleNotificationAction(notification, () => {
+                            handleOpenConversation(notification.conversationId!);
+                          })
+                        }
+                      >
+                        打开会话
+                      </button>
+                    )}
+                    {notification.courseId && (
+                      <button
+                        type="button"
+                        className="secondary-btn compact-btn"
+                        onClick={() =>
+                          handleNotificationAction(notification, (shouldLog) => {
+                            handleOpenNotificationCourse(notification, notification.courseId, shouldLog);
+                          })
+                        }
+                      >
+                        打开课程
+                      </button>
+                    )}
+                  </div>
+                )}
+              </article>
+            );
+          })}
           {filteredNotifications.length === 0 && (
             <section className="content-card">
               <div className="empty-state-card">

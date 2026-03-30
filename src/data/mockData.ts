@@ -11,12 +11,13 @@ import {
   ProfileState,
   RecoveryModule,
   TabKey,
+  VoiceRoom,
 } from '../types/app';
 
 export const tabs: Array<{ key: TabKey; label: string; subtitle: string }> = [
-  { key: 'home', label: '首页', subtitle: '恢复总览' },
+  { key: 'home', label: '首页', subtitle: '产品主线' },
   { key: 'courses', label: '课程', subtitle: '首个重建模块' },
-  { key: 'community', label: '校友圈', subtitle: '下一阶段' },
+  { key: 'community', label: '校友圈', subtitle: '次级恢复' },
   { key: 'library', label: '图书馆', subtitle: '资源模块' },
   { key: 'profile', label: '我的', subtitle: '资料与进度' },
 ];
@@ -54,6 +55,267 @@ export const modules: RecoveryModule[] = [
   },
 ];
 
+export const homeAnnouncements = [
+  {
+    id: 'notice-1',
+    title: '2026 春季学期选课通知',
+    date: '2026-03-20',
+    tone: 'alert' as const,
+  },
+  {
+    id: 'notice-2',
+    title: '全球宣教大会线上直播',
+    date: '2026-03-24',
+    tone: 'info' as const,
+  },
+  {
+    id: 'notice-3',
+    title: '图书馆新增资源：早期教父著作集',
+    date: '2026-03-28',
+    tone: 'calm' as const,
+  },
+];
+
+export const homeQuickEntries = [
+  {
+    id: 'academy',
+    title: '学院概览',
+    detail: '查看简介、入学指南与校园生活',
+    badge: 'Academy',
+  },
+  {
+    id: 'digital',
+    title: '数字教育',
+    detail: '在线讲座与远程资源',
+    badge: 'Digital',
+  },
+];
+
+export const homeVisionPoints = [
+  '培养通过神的话语和圣灵能力得到装备的牧者和宣教士。',
+  '在亚洲国家建立通过神的话语和圣灵能力得到装备的宣教中心。',
+  '在亚洲国家建立重视圣经和实践的神学校，培养该国本土牧者和工人。',
+];
+
+export const homeAnnouncementDetails = [
+  {
+    id: 'notice-detail-1',
+    eyebrow: 'Academic Office',
+    title: '春季选课将在 3 月 20 日开放',
+    detail: '本轮优先开放 B.Th 与 M.Div 核心课位，建议先完成《使徒行传与宣教拓展》的进度确认再提交选课。',
+    actionLabel: '打开通知中心',
+    actionTarget: 'notifications' as const,
+  },
+  {
+    id: 'notice-detail-2',
+    eyebrow: 'Live Event',
+    title: '全球宣教大会转为线上同步直播',
+    detail: '直播链接和会后回放会接入数字教育入口，方便正在修读宣教类课程的学员直接跟进。',
+    actionLabel: '打开当前课程',
+    actionTarget: 'course' as const,
+    courseId: 'course-acts',
+  },
+  {
+    id: 'notice-detail-3',
+    eyebrow: 'Library Update',
+    title: '图书馆新增早期教父与亚洲宣教史资料',
+    detail: '新增馆藏会同步进入图书馆精选区，后续也会接到课程材料页，方便课程与研究并行推进。',
+    actionLabel: '打开图书馆资源',
+    actionTarget: 'resource' as const,
+    resourceId: 'lib-1',
+  },
+];
+
+export const homeOverviewSections = [
+  {
+    id: 'academy-overview-1',
+    eyebrow: 'Seminary Profile',
+    title: '学院定位',
+    detail: 'AMAS 以宣教、圣经和实践神学为主线，帮助跨地区学员在同一平台里完成装备、讨论与持续跟进。',
+    actionLabel: '打开学习工作台',
+    actionTarget: 'profile' as const,
+  },
+  {
+    id: 'academy-overview-2',
+    eyebrow: 'Admissions',
+    title: '入学路径',
+    detail: '从快速注册、学位选择到导师沟通，入口已经在源码版前置恢复，后续可继续补远程面试与资料上传。',
+    actionLabel: '查看当前课程',
+    actionTarget: 'course' as const,
+    courseId: 'course-corinthians',
+  },
+  {
+    id: 'academy-overview-3',
+    eyebrow: 'Campus Archive',
+    title: '院史与校园生活',
+    detail: '恢复快照里最具辨识度的院史内容会逐步回迁到图书馆档案区，作为学院文化和毕业讲章的统一入口。',
+    actionLabel: '打开院史档案',
+    actionTarget: 'resource' as const,
+    resourceId: 'lib-4',
+  },
+];
+
+export const homeDigitalHighlights = [
+  {
+    id: 'digital-highlight-1',
+    eyebrow: 'Online Lecture',
+    title: '线上讲座与回放',
+    detail: '公开讲座、宣教大会和专题分享会优先通过数字教育入口聚合，后面会继续补直播状态和回放标记。',
+    actionLabel: '查看全部通知',
+    actionTarget: 'notifications' as const,
+  },
+  {
+    id: 'digital-highlight-2',
+    eyebrow: 'Resource Sync',
+    title: '课程资源与图书馆联动',
+    detail: '讲义、音频和档案资源会同时出现在图书馆与课程资料页，方便学员在不同入口继续学习。',
+    actionLabel: '打开精选资源',
+    actionTarget: 'resource' as const,
+    resourceId: 'lib-3',
+  },
+  {
+    id: 'digital-highlight-3',
+    eyebrow: 'Learning Community',
+    title: '讨论与复盘',
+    detail: '课程感悟、导师提醒和同学讨论正在统一回流到社区与个人中心，让学习记录形成闭环。',
+    actionLabel: '进入消息区',
+    actionTarget: 'conversations' as const,
+  },
+];
+
+export const homeAnnouncementArchive = [
+  {
+    id: 'announcement-archive-1',
+    eyebrow: '教务公告',
+    title: '全体新生线上说明会',
+    detail: '本周五会统一说明选课、导师跟进和课程资料的使用方式，后续会补回放入口。',
+    meta: '2026-03-18',
+    actionLabel: '打开通知中心',
+    actionTarget: 'notifications' as const,
+  },
+  {
+    id: 'announcement-archive-2',
+    eyebrow: '课程同步',
+    title: '使徒行传课程讨论区开放',
+    detail: '本周会把课程感悟和讨论提醒重新接回社区入口，方便课后马上复盘。',
+    meta: '2026-03-19',
+    actionLabel: '打开当前课程',
+    actionTarget: 'course' as const,
+    courseId: 'course-acts',
+  },
+  {
+    id: 'announcement-archive-3',
+    eyebrow: '图书馆',
+    title: '院史档案区开放第一批资料',
+    detail: '首批恢复的院史与毕业讲章已挂到图书馆，后续继续补检索和专题整理。',
+    meta: '2026-03-21',
+    actionLabel: '打开院史档案',
+    actionTarget: 'resource' as const,
+    resourceId: 'lib-4',
+  },
+];
+
+export const homeAcademyTracks = [
+  {
+    id: 'academy-track-1',
+    badge: 'B.Th',
+    title: '圣经与宣教基础',
+    detail: '聚焦差遣、跨文化进入和经文装备，适合作为重建后的第一批核心课程入口。',
+    actionLabel: '打开课程样本',
+    actionTarget: 'course' as const,
+    courseId: 'course-acts',
+  },
+  {
+    id: 'academy-track-2',
+    badge: 'M.Div',
+    title: '经文与教会建造',
+    detail: '围绕书卷课程、群体牧养和讲道训练，逐步恢复更完整的课程体系。',
+    actionLabel: '查看课程入口',
+    actionTarget: 'course' as const,
+    courseId: 'course-corinthians',
+  },
+  {
+    id: 'academy-track-3',
+    badge: 'Archive',
+    title: '院史与校园生活',
+    detail: '通过档案、毕业讲章和校园资料，把原 App 里最有辨识度的学院气质逐步找回来。',
+    actionLabel: '打开院史档案',
+    actionTarget: 'resource' as const,
+    resourceId: 'lib-4',
+  },
+];
+
+export const homeAdmissionGuide = [
+  {
+    id: 'admission-step-1',
+    step: '01',
+    title: '快速注册并选择学位',
+    detail: '源码版已经接入登录 / 注册入口，先从学位方向进入，再逐步补齐真实报名资料。',
+  },
+  {
+    id: 'admission-step-2',
+    step: '02',
+    title: '确认导师与课程方向',
+    detail: '结合当前学习目标选择核心课程，后面会继续加上导师推荐与远程面谈流程。',
+  },
+  {
+    id: 'admission-step-3',
+    step: '03',
+    title: '进入课程与社群工作台',
+    detail: '完成注册后直接进入课程、校友圈和个人中心，让学习、交流和复盘形成统一路径。',
+  },
+];
+
+export const homeDigitalPrograms = [
+  {
+    id: 'digital-program-1',
+    badge: 'Remote',
+    title: '远程课堂',
+    detail: '把正在修读的课程、直播讲座和课后回放汇总到一个入口，适合移动端连续学习。',
+    actionLabel: '打开当前课程',
+    actionTarget: 'course' as const,
+    courseId: 'course-corinthians',
+  },
+  {
+    id: 'digital-program-2',
+    badge: 'Library',
+    title: '资源联动',
+    detail: '讲义、音频和研究资料会同时出现在图书馆与课程资料页，减少来回查找成本。',
+    actionLabel: '打开精选资源',
+    actionTarget: 'resource' as const,
+    resourceId: 'lib-3',
+  },
+  {
+    id: 'digital-program-3',
+    badge: 'Community',
+    title: '复盘与互动',
+    detail: '讨论提醒、导师反馈和同学消息已经开始回流到个人中心的今日处理节奏中。',
+    actionLabel: '进入消息区',
+    actionTarget: 'conversations' as const,
+  },
+];
+
+export const homeDigitalSchedule = [
+  {
+    id: 'digital-schedule-1',
+    time: '周二 20:00',
+    title: '亚洲宣教趋势公开讲座',
+    detail: '直播结束后会同步回放入口，适合作为数字教育模块的第一批公开内容。',
+  },
+  {
+    id: 'digital-schedule-2',
+    time: '周四 19:30',
+    title: '哥林多前书远程课堂',
+    detail: '课程进行中时优先把当前课次与相关资料置顶，减少移动端来回跳转。',
+  },
+  {
+    id: 'digital-schedule-3',
+    time: '周六 10:00',
+    title: '导师答疑与学习复盘',
+    detail: '后续会把答疑记录和群组讨论打通到社区与个人中心的复盘入口。',
+  },
+];
+
 export const courseCategories: Array<{ key: CourseCategory; label: string }> = [
   { key: 'all', label: '全部' },
   { key: 'mission', label: '宣教神学' },
@@ -86,7 +348,7 @@ export const courses: CourseItem[] = [
       { id: 'acts-5', title: '跨文化进入与本地同工', duration: '17:15', completed: false },
     ],
     materials: [
-      { id: 'acts-m1', title: '课程讲义总览', format: 'PDF', status: 'ready' },
+      { id: 'acts-m1', title: '课程讲义总览', format: 'PDF', status: 'ready', libraryResourceId: 'lib-1' },
       { id: 'acts-m2', title: '宣教旅程地图', format: 'Worksheet', status: 'ready' },
       { id: 'acts-m3', title: '课堂回顾音频', format: 'Audio', status: 'draft' },
     ],
@@ -94,7 +356,7 @@ export const courses: CourseItem[] = [
   {
     id: 'course-corinthians',
     title: '哥林多前书',
-    instructor: 'Dr. Enos Lee',
+    instructor: 'Dr. Lydia Tan',
     category: 'bible',
     degree: 'M.Div',
     lessons: 10,
@@ -114,7 +376,7 @@ export const courses: CourseItem[] = [
     ],
     materials: [
       { id: 'cor-m1', title: '书信结构图', format: 'PDF', status: 'ready' },
-      { id: 'cor-m2', title: '课堂录音节选', format: 'Audio', status: 'ready' },
+      { id: 'cor-m2', title: '课堂录音节选', format: 'Audio', status: 'ready', libraryResourceId: 'lib-3' },
       { id: 'cor-m3', title: '神学术语卡片', format: 'Worksheet', status: 'ready' },
     ],
   },
@@ -139,7 +401,7 @@ export const courses: CourseItem[] = [
       { id: 'pc-3', title: '跟进与记录', duration: '12:25', completed: false },
     ],
     materials: [
-      { id: 'pc-m1', title: '代祷跟进模板', format: 'Worksheet', status: 'ready' },
+      { id: 'pc-m1', title: '代祷跟进模板', format: 'Worksheet', status: 'ready', libraryResourceId: 'lib-2' },
       { id: 'pc-m2', title: '课堂案例录音', format: 'Audio', status: 'draft' },
     ],
   },
@@ -164,7 +426,7 @@ export const courses: CourseItem[] = [
       { id: 'ld-3', title: '冲突处理与复盘', duration: '17:55', completed: false },
     ],
     materials: [
-      { id: 'ld-m1', title: '治理结构草案', format: 'PDF', status: 'ready' },
+      { id: 'ld-m1', title: '治理结构草案', format: 'PDF', status: 'ready', libraryResourceId: 'lib-4' },
       { id: 'ld-m2', title: '会议模板', format: 'Worksheet', status: 'ready' },
       { id: 'ld-m3', title: '课程导言视频', format: 'Video', status: 'draft' },
     ],
@@ -218,6 +480,19 @@ export const communityPosts: CommunityPostPreview[] = [
     content: '课程源码恢复已进入第二阶段。接下来会优先恢复课程详情、校友圈通知和聊天入口。',
     badge: '系统公告',
     likes: 3,
+    liked: false,
+    comments: [],
+  },
+  {
+    id: 'post-4',
+    author: '课程恢复工作群',
+    role: 'Community',
+    time: '昨天 18:10',
+    content: '课程恢复答疑房整理出三条重点：\n1. 账号隔离后的本地草稿已经按用户分仓。\n2. 社区快照现在会带上语音房和聊天记录。\n3. 下一步优先补成员在线态和主持控制。\n\n可以直接回到语音房继续看后续讨论。',
+    badge: '恢复记录',
+    voiceRoomId: 'room-office-qa',
+    voiceRoomTitle: '课程恢复答疑房',
+    likes: 6,
     liked: false,
     comments: [],
   },
@@ -325,6 +600,16 @@ export const communityNotifications: CommunityNotification[] = [
     conversationId: 'conv-3',
     postId: 'post-2',
   },
+  {
+    id: 'notice-4',
+    title: '课程恢复答疑房已恢复在线',
+    detail: '主持重连已经稳定，现在可以直接回到答疑房继续跟进源码恢复和同步问题。',
+    time: '刚刚',
+    type: 'system',
+    read: false,
+    voiceRoomId: 'room-office-qa',
+    voiceRoomTitle: '课程恢复答疑房',
+  },
 ];
 
 export const communityChatMessages: Record<string, ChatMessage[]> = {
@@ -335,6 +620,17 @@ export const communityChatMessages: Record<string, ChatMessage[]> = {
   'conv-2': [
     { id: 'conv-2-m1', sender: 'other', content: '我先把课程详情和学习记录跑通，再接聊天。', time: '昨天 17:20' },
     { id: 'conv-2-m2', sender: 'me', content: '收到，校友圈通知和最近消息入口我来补源码结构。', time: '昨天 17:26' },
+    {
+      id: 'conv-2-m3',
+      sender: 'me',
+      content: '邀请你加入语音房「课程恢复答疑房」',
+      time: '昨天 17:42',
+      type: 'voice_room_invite',
+      voiceRoomId: 'room-office-qa',
+      voiceRoomTitle: '课程恢复答疑房',
+      voiceRoomSummary: '集中回答这轮源码恢复、学习记录和远端同步相关的问题。',
+      voiceRoomTopic: '导师答疑',
+    },
   ],
   'conv-3': [
     { id: 'conv-3-m1', sender: 'other', content: '代祷案例模板已经放进课程资料区了。', time: '周一 10:15' },
@@ -343,11 +639,238 @@ export const communityChatMessages: Record<string, ChatMessage[]> = {
   ],
 };
 
+export const communityVoiceRooms: VoiceRoom[] = [
+  {
+    id: 'room-acts-review',
+    title: '使徒行传课程复盘房',
+    summary: '围绕第二次宣教旅程整理要点，也欢迎把课程感悟现场补进校友圈。',
+    topic: '课程复盘',
+    status: 'live',
+    joinPolicy: 'open',
+    time: '直播中 · 18 分钟',
+    hostName: 'Rev. Daniel Wong',
+    courseId: 'course-acts',
+    joined: false,
+    speakerCount: 2,
+    participantCount: 9,
+    speakerRequestMemberIds: ['room-acts-member-3'],
+    activity: [
+      {
+        id: 'room-acts-activity-2',
+        type: 'request',
+        title: '新的上麦申请',
+        detail: 'Grace 已在复盘阶段举手申请上麦。',
+        time: '2 分钟前',
+      },
+      {
+        id: 'room-acts-activity-1',
+        type: 'member',
+        title: '课程复盘已开始',
+        detail: 'Rev. Daniel Wong 已带领这轮使徒行传课程复盘。',
+        time: '18 分钟前',
+      },
+    ],
+    members: [
+      {
+        id: 'room-acts-member-1',
+        name: 'Rev. Daniel Wong',
+        badge: '主持',
+        role: 'host',
+        state: 'speaking',
+        presence: 'online',
+        contactId: 'contact-daniel',
+      },
+      {
+        id: 'room-acts-member-2',
+        name: '林恩典',
+        badge: 'B.Th 2023',
+        role: 'speaker',
+        state: 'muted',
+        presence: 'online',
+      },
+      {
+        id: 'room-acts-member-3',
+        name: 'Grace',
+        badge: '代祷协调',
+        role: 'listener',
+        state: 'listening',
+        presence: 'away',
+        contactId: 'contact-grace',
+      },
+    ],
+  },
+  {
+    id: 'room-prayer-circle',
+    title: '牧养关怀代祷房',
+    summary: '集中跟进本周危机陪伴案例，方便课程资料、代祷事项和聊天记录一起回流。',
+    topic: '代祷陪伴',
+    status: 'live',
+    joinPolicy: 'open',
+    time: '直播中 · 7 分钟',
+    hostName: 'Grace',
+    courseId: 'course-pastoral-care',
+    joined: false,
+    speakerCount: 1,
+    participantCount: 6,
+    speakerRequestMemberIds: ['room-prayer-member-2'],
+    activity: [
+      {
+        id: 'room-prayer-activity-2',
+        type: 'member',
+        title: '代祷同工暂离',
+        detail: 'Sarah Kim 当前暂时离线，主持仍在继续带领代祷。',
+        time: '1 分钟前',
+      },
+      {
+        id: 'room-prayer-activity-1',
+        type: 'system',
+        title: '房间提醒已发出',
+        detail: 'Grace 已把本轮代祷房提醒发回同工会话。',
+        time: '5 分钟前',
+      },
+    ],
+    members: [
+      {
+        id: 'room-prayer-member-1',
+        name: 'Grace',
+        badge: '主持',
+        role: 'host',
+        state: 'speaking',
+        presence: 'online',
+        contactId: 'contact-grace',
+      },
+      {
+        id: 'room-prayer-member-2',
+        name: 'Sarah Kim',
+        badge: '导师',
+        role: 'listener',
+        state: 'listening',
+        presence: 'away',
+      },
+    ],
+  },
+  {
+    id: 'room-office-qa',
+    title: '课程恢复答疑房',
+    summary: '集中回答这轮源码恢复、学习记录和远端同步相关的问题。',
+    topic: '导师答疑',
+    status: 'live',
+    joinPolicy: 'approval',
+    time: '直播中 · 26 分钟',
+    hostName: '教务处',
+    joined: false,
+    speakerCount: 2,
+    participantCount: 14,
+    joinRequests: [
+      {
+        id: 'room-office-join-1',
+        name: '李安德',
+        badge: 'M.Div 2024',
+        time: '1 分钟前',
+      },
+    ],
+    speakerRequestMemberIds: [],
+    activity: [
+      {
+        id: 'room-office-activity-2',
+        type: 'moderation',
+        title: '主持暂时重连',
+        detail: '教务处当前处于重连中，房间内已提示可临时接手主持。',
+        time: '刚刚',
+      },
+      {
+        id: 'room-office-activity-1',
+        type: 'member',
+        title: '答疑已开始',
+        detail: '张彼得 已先在发言席整理这轮恢复问题。',
+        time: '8 分钟前',
+      },
+    ],
+    members: [
+      {
+        id: 'room-office-member-1',
+        name: '教务处',
+        badge: '主持',
+        role: 'host',
+        state: 'speaking',
+        presence: 'reconnecting',
+      },
+      {
+        id: 'room-office-member-2',
+        name: '张彼得',
+        badge: 'M.Div 2022',
+        role: 'speaker',
+        state: 'speaking',
+        presence: 'online',
+        contactId: 'contact-peter',
+      },
+    ],
+  },
+  {
+    id: 'room-leadership-roundtable',
+    title: '同工协作圆桌',
+    summary: '围绕治理案例、复盘节奏和资料联动，先恢复一个可复用的同工交通房间壳子。',
+    topic: '同工交通',
+    status: 'live',
+    joinPolicy: 'approval',
+    time: '直播中 · 11 分钟',
+    hostName: 'Dr. Maria Santos',
+    courseId: 'course-leadership',
+    joined: false,
+    speakerCount: 1,
+    participantCount: 5,
+    joinRequests: [
+      {
+        id: 'room-leadership-join-1',
+        name: '徐保罗',
+        badge: '治理同工',
+        time: '刚刚',
+      },
+    ],
+    speakerRequestMemberIds: ['room-leadership-member-2'],
+    activity: [
+      {
+        id: 'room-leadership-activity-2',
+        type: 'request',
+        title: '同工申请上麦',
+        detail: '牧养实践同工 正等待主持批准上麦。',
+        time: '3 分钟前',
+      },
+      {
+        id: 'room-leadership-activity-1',
+        type: 'system',
+        title: '圆桌已开场',
+        detail: 'Dr. Maria Santos 已开启本轮治理案例圆桌。',
+        time: '11 分钟前',
+      },
+    ],
+    members: [
+      {
+        id: 'room-leadership-member-1',
+        name: 'Dr. Maria Santos',
+        badge: '主持',
+        role: 'host',
+        state: 'speaking',
+        presence: 'online',
+        contactId: 'contact-maria',
+      },
+      {
+        id: 'room-leadership-member-2',
+        name: '牧养实践同工',
+        badge: '同工',
+        role: 'listener',
+        state: 'listening',
+        presence: 'away',
+      },
+    ],
+  },
+];
+
 export const defaultProfile: ProfileState = {
-  name: 'Enos Lee',
-  role: 'AMAS Seminary Product Recovery',
+  name: 'AMAS 学员',
+  role: '亚洲宣教神学院 学员',
   bio: '当前以源码恢复为主线，先稳定课程、校友圈和个人中心的状态层，再继续恢复聊天、通知和图书馆业务。',
-  email: 'enos@amas.local',
+  email: 'student@amas.local',
   location: 'Bangkok',
 };
 
@@ -375,7 +898,7 @@ export const libraryResources: LibraryResource[] = [
   {
     id: 'lib-3',
     title: '课堂回顾音频：哥林多前书',
-    author: 'Dr. Enos Lee',
+    author: 'Dr. Lydia Tan',
     category: 'audio',
     format: 'Audio',
     summary: '恢复课程音频资源与学习资料同步入口，为后续播放器和离线状态做准备。',

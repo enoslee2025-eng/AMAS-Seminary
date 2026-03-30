@@ -2,9 +2,9 @@ import { TabKey } from '../../types/app';
 
 const descriptions: Record<TabKey, { eyebrow: string; title: string; chip: string }> = {
   home: {
-    eyebrow: 'Source Rebuild',
-    title: '源码重建版',
-    chip: 'Current',
+    eyebrow: 'Product Source',
+    title: '源码产品主线',
+    chip: 'Primary',
   },
   courses: {
     eyebrow: 'Courses Rebuild',
@@ -12,9 +12,9 @@ const descriptions: Record<TabKey, { eyebrow: string; title: string; chip: strin
     chip: 'Phase 2',
   },
   community: {
-    eyebrow: 'Community Rebuild',
-    title: '校友圈模块',
-    chip: 'Phase 3',
+    eyebrow: 'Community Sandbox',
+    title: '校友圈次级恢复区',
+    chip: 'Secondary',
   },
   library: {
     eyebrow: 'Library Rebuild',

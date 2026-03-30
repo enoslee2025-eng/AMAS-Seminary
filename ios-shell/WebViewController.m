@@ -12,6 +12,10 @@
 
 @implementation WebViewController
 
+- (UIColor *)amasChromeColor {
+  return [UIColor colorWithRed:30.0 / 255.0 green:58.0 / 255.0 blue:138.0 / 255.0 alpha:1.0];
+}
+
 - (NSString *)avatarFallbackScript {
   return @"(function(){"
           "if(window.__amasAvatarPatchInstalled){return;}"
@@ -157,7 +161,8 @@
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  self.view.backgroundColor = [UIColor systemBackgroundColor];
+  UIColor *amasChromeColor = [self amasChromeColor];
+  self.view.backgroundColor = amasChromeColor;
 
   WKWebViewConfiguration *configuration = [[WKWebViewConfiguration alloc] init];
   WKUserContentController *contentController = [[WKUserContentController alloc] init];
@@ -172,7 +177,13 @@
   self.webView.navigationDelegate = self;
   self.webView.UIDelegate = self;
   self.webView.allowsBackForwardNavigationGestures = YES;
+  self.webView.opaque = NO;
+  self.webView.backgroundColor = [UIColor clearColor];
   self.webView.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+  self.webView.scrollView.bounces = NO;
+  self.webView.scrollView.alwaysBounceVertical = NO;
+  self.webView.scrollView.alwaysBounceHorizontal = NO;
+  self.webView.scrollView.backgroundColor = amasChromeColor;
 
   self.progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
   self.progressView.translatesAutoresizingMaskIntoConstraints = NO;

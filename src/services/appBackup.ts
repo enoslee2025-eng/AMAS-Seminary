@@ -1,22 +1,28 @@
-import { AppBackupPayload, CourseRuntimeRecord, LibraryRuntimeRecord, ProfileState } from '../types/app';
+import {
+  AppBackupPayload,
+  AppBackupSnapshot,
+  AppDomainSnapshot,
+  LegacyAppBackupPayload,
+} from '../types/app';
+import { createDefaultAppDomainSnapshot, normalizeAppDomainSnapshot } from './appRepository';
 
-const BACKUP_VERSION = 1;
+const BACKUP_VERSION = 2;
 
-export function createAppBackupPayload({
-  profile,
-  courseRuntime,
-  libraryRuntime,
-}: {
-  profile: ProfileState;
-  courseRuntime: CourseRuntimeRecord;
-  libraryRuntime: LibraryRuntimeRecord;
-}): AppBackupPayload {
+function buildBackupSnapshot(snapshot: AppDomainSnapshot): AppBackupSnapshot {
+  const normalized = normalizeAppDomainSnapshot(snapshot);
+
+  return {
+    ...normalized,
+    authSession: null,
+  };
+}
+
+export function createAppBackupPayload(snapshot: AppDomainSnapshot): AppBackupPayload {
   return {
     version: BACKUP_VERSION,
+    scope: 'full_snapshot',
     exportedAt: new Date().toISOString(),
-    profile,
-    courseRuntime,
-    libraryRuntime,
+    snapshot: buildBackupSnapshot(snapshot),
   };
 }
 
@@ -36,82 +42,62 @@ export function downloadAppBackup(payload: AppBackupPayload) {
 export async function parseAppBackupFile(file: File): Promise<AppBackupPayload> {
   const parsed = JSON.parse(await file.text()) as unknown;
 
-  if (!isAppBackupPayload(parsed)) {
+  const normalized = normalizeBackupPayload(parsed);
+  if (!normalized) {
     throw new Error('备份文件格式无效，请重新选择导出的 JSON 存档。');
   }
 
-  return parsed;
+  return normalized;
+}
+
+function normalizeBackupPayload(value: unknown): AppBackupPayload | null {
+  if (isAppBackupPayload(value)) {
+    return {
+      version: BACKUP_VERSION,
+      scope: 'full_snapshot',
+      exportedAt: value.exportedAt,
+      snapshot: buildBackupSnapshot(value.snapshot),
+    };
+  }
+
+  if (isLegacyAppBackupPayload(value)) {
+    const fallback = createDefaultAppDomainSnapshot();
+
+    return {
+      version: BACKUP_VERSION,
+      scope: 'legacy_partial',
+      exportedAt: value.exportedAt,
+      snapshot: buildBackupSnapshot({
+        ...fallback,
+        profile: value.profile,
+        courseRuntime: value.courseRuntime,
+        libraryRuntime: value.libraryRuntime,
+      }),
+    };
+  }
+
+  return null;
 }
 
 function isAppBackupPayload(value: unknown): value is AppBackupPayload {
-  if (!isRecord(value)) {
-    return false;
-  }
-
   return (
+    isRecord(value) &&
     value.version === BACKUP_VERSION &&
+    (value.scope === 'full_snapshot' || value.scope === 'legacy_partial') &&
     typeof value.exportedAt === 'string' &&
-    isProfileState(value.profile) &&
-    isCourseRuntimeRecord(value.courseRuntime) &&
-    isLibraryRuntimeRecord(value.libraryRuntime)
+    isRecord(value.snapshot)
   );
 }
 
-function isProfileState(value: unknown): value is ProfileState {
-  if (!isRecord(value)) {
-    return false;
-  }
-
+function isLegacyAppBackupPayload(value: unknown): value is LegacyAppBackupPayload {
   return (
-    typeof value.name === 'string' &&
-    typeof value.role === 'string' &&
-    typeof value.bio === 'string' &&
-    typeof value.email === 'string' &&
-    typeof value.location === 'string'
+    isRecord(value) &&
+    value.version === 1 &&
+    typeof value.exportedAt === 'string' &&
+    isRecord(value.profile) &&
+    isRecord(value.courseRuntime) &&
+    isRecord(value.libraryRuntime)
   );
-}
-
-function isCourseRuntimeRecord(value: unknown): value is CourseRuntimeRecord {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  return Object.values(value).every((item) => {
-    if (!isRecord(item)) {
-      return false;
-    }
-
-    return (
-      (item.currentLessonId === null || typeof item.currentLessonId === 'string') &&
-      isStringArray(item.completedLessonIds) &&
-      isStringArray(item.viewedMaterialIds) &&
-      (item.lastStudiedAt === null || typeof item.lastStudiedAt === 'string') &&
-      (item.lastOpenedTab === 'overview' || item.lastOpenedTab === 'syllabus' || item.lastOpenedTab === 'materials')
-    );
-  });
-}
-
-function isLibraryRuntimeRecord(value: unknown): value is LibraryRuntimeRecord {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  return Object.values(value).every((item) => {
-    if (!isRecord(item)) {
-      return false;
-    }
-
-    return (
-      typeof item.favorite === 'boolean' &&
-      typeof item.viewed === 'boolean' &&
-      typeof item.downloaded === 'boolean' &&
-      (item.lastViewedAt === null || typeof item.lastViewedAt === 'string')
-    );
-  });
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

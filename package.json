@@ -6,8 +6,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:remote": "VITE_APP_GATEWAY_MODE=remote VITE_API_BASE_URL=http://127.0.0.1:8787 vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "api": "node ./server/amas-api.mjs",
+    "smoke:remote": "node ./scripts/smoke-remote.mjs",
+    "smoke:remote:recovery": "node ./scripts/smoke-remote-recovery.mjs",
+    "smoke:remote:expiry": "node ./scripts/smoke-remote-session-expiry.mjs",
     "dev:recovered": "./scripts/serve-recovered.sh",
     "ios:recovered": "./scripts/start-ios-recovered.sh",
     "start": "./scripts/serve-recovered.sh",

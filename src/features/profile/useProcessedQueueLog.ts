@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction, useEffect } from 'react';
-import { usePersistentState } from '../../hooks/usePersistentState';
+import { buildScopedStorageKey, usePersistentState } from '../../hooks/usePersistentState';
 import { ProcessedQueueLogItem } from './profileState';
 
 const processedQueueLogStorageKey = 'amas_profile_processed_queue_log';
@@ -15,20 +15,24 @@ function normalizeProcessedQueueLogItem(item: ProcessedQueueLogItem): ProcessedQ
     : item;
 }
 
-function readProcessedQueueLog() {
+function buildProcessedQueueLogSyncEvent(scopeKey?: string | null) {
+  return `${processedQueueLogSyncEvent}:${scopeKey?.trim() || 'global'}`;
+}
+
+function readProcessedQueueLog(storageKey: string) {
   try {
-    const stored = window.localStorage.getItem(processedQueueLogStorageKey);
+    const stored = window.localStorage.getItem(storageKey);
     return stored ? (JSON.parse(stored) as ProcessedQueueLogItem[]).map(normalizeProcessedQueueLogItem) : [];
   } catch {
     return [];
   }
 }
 
-function writeProcessedQueueLog(items: ProcessedQueueLogItem[]) {
+function writeProcessedQueueLog(storageKey: string, syncEventName: string, items: ProcessedQueueLogItem[]) {
   try {
-    window.localStorage.setItem(processedQueueLogStorageKey, JSON.stringify(items));
+    window.localStorage.setItem(storageKey, JSON.stringify(items));
     window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent(processedQueueLogSyncEvent));
+      window.dispatchEvent(new CustomEvent(syncEventName));
     }, 0);
   } catch {
     // Ignore storage failures in rebuild shell.
@@ -39,34 +43,36 @@ function limitProcessedQueueLog(items: ProcessedQueueLogItem[]) {
   return items.slice(0, processedQueueLogLimit);
 }
 
-export function useProcessedQueueLog(): [
+export function useProcessedQueueLog(scopeKey?: string | null): [
   ProcessedQueueLogItem[],
   Dispatch<SetStateAction<ProcessedQueueLogItem[]>>,
   (item: ProcessedQueueLogItem) => void,
 ] {
+  const storageKey = buildScopedStorageKey(processedQueueLogStorageKey, scopeKey);
+  const syncEventName = buildProcessedQueueLogSyncEvent(scopeKey);
   const [processedQueueLog, setProcessedQueueLog] = usePersistentState<ProcessedQueueLogItem[]>(
-    processedQueueLogStorageKey,
+    storageKey,
     [],
   );
 
   useEffect(() => {
     const syncProcessedQueueLog = () => {
-      setProcessedQueueLog(readProcessedQueueLog());
+      setProcessedQueueLog(readProcessedQueueLog(storageKey));
     };
 
     window.addEventListener('storage', syncProcessedQueueLog);
-    window.addEventListener(processedQueueLogSyncEvent, syncProcessedQueueLog);
+    window.addEventListener(syncEventName, syncProcessedQueueLog);
 
     return () => {
       window.removeEventListener('storage', syncProcessedQueueLog);
-      window.removeEventListener(processedQueueLogSyncEvent, syncProcessedQueueLog);
+      window.removeEventListener(syncEventName, syncProcessedQueueLog);
     };
-  }, [setProcessedQueueLog]);
+  }, [setProcessedQueueLog, storageKey, syncEventName]);
 
   const appendProcessedQueueLog = (item: ProcessedQueueLogItem) => {
     setProcessedQueueLog((current) => {
       const next = limitProcessedQueueLog([item, ...current]);
-      writeProcessedQueueLog(next);
+      writeProcessedQueueLog(storageKey, syncEventName, next);
       return next;
     });
   };
